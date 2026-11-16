@@ -135,7 +135,7 @@ export function claimFor(uid) {
   } catch { /* blocked */ }
   const action = ownerAction(previous, uid);
   if (action === 'reset') {
-    for (const key of SYNC_KEYS) {
+    for (const key of [...SYNC_KEYS, 'gymActive']) {
       cache.set(key, undefined);
       try {
         storage().removeItem(PREFIX + key);
