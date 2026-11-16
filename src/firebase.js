@@ -16,7 +16,7 @@ const env = import.meta.env;
 export const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyAsfaPSuxIwR2SoHJ8RBCRQiJ6q-PbNwEU',
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'disciplined-3e309.firebaseapp.com',
-  databaseURL: env.VITE_FIREBASE_DATABASE_URL || 'https://disciplined-3e309-default-rtdb.firebaseio.com',
+  databaseURL: env.VITE_FIREBASE_DATABASE_URL || 'https://disciplined-3e309-default-rtdb.europe-west1.firebasedatabase.app',
   projectId: env.VITE_FIREBASE_PROJECT_ID || 'disciplined-3e309',
   appId: env.VITE_FIREBASE_APP_ID || '1:180200171366:web:a2035d4abb48e69bf5caa7',
 };

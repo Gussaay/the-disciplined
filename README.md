@@ -130,7 +130,7 @@ cloud on, in the Firebase console of that project:
 
 1. **Authentication** > Sign-in method: turn on Email/Password and Google.
 2. **Realtime Database** > Create database. If its URL is not
-   `https://disciplined-3e309-default-rtdb.firebaseio.com` (another region),
+   `https://disciplined-3e309-default-rtdb.europe-west1.firebasedatabase.app` (another region),
    set the repository variable `VITE_FIREBASE_DATABASE_URL` to the real one.
 3. Authentication > Settings > Authorized domains: add `gussaay.github.io` if
    the web app is served from GitHub Pages.
@@ -146,7 +146,7 @@ shows secret values again and nothing outside your own browser can add them.
 
 | Secret | What it is |
 |---|---|
-| `FIREBASE_SERVICE_ACCOUNT` | The whole JSON of a service-account key for disciplined-3e309 (Firebase console > Project settings > Service accounts > Generate new private key; paste the file's contents). Each push to `main` then deploys Hosting and the database rules. |
+| `FIREBASE_SERVICE_ACCOUNT_DISCIPLINED` (or `FIREBASE_SERVICE_ACCOUNT`) | The whole JSON of a service-account key for disciplined-3e309 (Firebase console > Project settings > Service accounts > Generate new private key; paste the file's contents). Each push to `main` then deploys Hosting and the database rules. |
 | `KEYSTORE_BASE64` | Your Android signing key, base64 (below). |
 | `KEYSTORE_PASSWORD` | The keystore password. |
 | `KEY_PASSWORD` | The key password (omit if it equals the keystore password). |

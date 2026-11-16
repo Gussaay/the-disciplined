@@ -9,7 +9,7 @@ name: Test, build web and APK
 #   4. publishes the web app to GitHub Pages (needs Settings > Pages > Source:
 #      "GitHub Actions" once; until then that job is skipped over),
 #   5. deploys Firebase Hosting and the database rules (project disciplined-3e309)
-#      when the FIREBASE_SERVICE_ACCOUNT secret exists (see README).
+#      when the FIREBASE_SERVICE_ACCOUNT_DISCIPLINED (or FIREBASE_SERVICE_ACCOUNT) secret exists (see README).
 on:
   push:
     branches:
@@ -201,7 +201,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: web
     env:
-      HAS_FIREBASE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+      HAS_FIREBASE: ${{ (secrets.FIREBASE_SERVICE_ACCOUNT_DISCIPLINED || secrets.FIREBASE_SERVICE_ACCOUNT) != '' }}
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'disciplined-3e309' }}
     steps:
       - uses: actions/checkout@v4
@@ -214,7 +214,7 @@ jobs:
       - name: Build and deploy hosting and database rules
         if: env.HAS_FIREBASE == 'true'
         env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DISCIPLINED || secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           npm ci
           npm run build
