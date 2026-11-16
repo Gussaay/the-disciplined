@@ -55,3 +55,53 @@ test('burn estimate grows with time and body weight', () => {
   assert.ok(estimateBurn(s, 90) > estimateBurn(s, 60));
   assert.ok(estimateBurn(s, 70) > 150 && estimateBurn(s, 70) < 400);
 });
+
+// --- the workout in progress ---
+import { addSet, finishSession, makeExercise, newSession, setComplete } from './gymSession.js';
+import { hrStats, parseHeartRate, summarise } from './hrParse.js';
+
+test('a new exercise starts from last time, or three empty sets', () => {
+  const sessions = [session('a', '2026-01-01', 1, [set(50, 10), set(55, 8)])];
+  const again = makeExercise({ id: 'bench_press', muscle: 'chest' }, sessions);
+  assert.deepEqual(again.sets.map((s) => s.weight), [50, 55]);
+  assert.ok(again.sets.every((s) => s.reps === '' && !s.done));
+  assert.equal(makeExercise({ id: 'squat' }, sessions).sets.length, 3);
+  assert.equal(makeExercise({ id: 'treadmill_run', unit: 'cardio' }, sessions).sets.length, 1);
+});
+
+test('adding a set repeats the previous one', () => {
+  const e = addSet({ unit: 'kg', sets: [{ weight: 40, reps: 10, done: true }] });
+  assert.deepEqual(e.sets[1], { weight: 40, reps: 10, done: false });
+});
+
+test('finishing keeps only completed sets and non-empty exercises', () => {
+  const s = newSession('Day', [{ id: 'squat' }, { id: 'plank', unit: 'time' }], []);
+  s.exercises[0].sets[0] = { weight: 60, reps: 5, done: true };
+  s.exercises[0].sets[1] = { weight: 60, reps: '', done: true };
+  const done = finishSession(s, { n: 3, avg: 120, max: 150 }, s.startedAt + 1000);
+  assert.equal(done.exercises.length, 1);
+  assert.equal(done.exercises[0].sets.length, 1);
+  assert.deepEqual(done.hr, { avg: 120, max: 150 });
+  assert.equal(setComplete({ seconds: 30 }, 'time'), true);
+  assert.equal(setComplete({ minutes: 0 }, 'cardio'), false);
+});
+
+test('heart rate packets: one-byte and two-byte values', () => {
+  assert.equal(parseHeartRate(new DataView(new Uint8Array([0x00, 72]).buffer)), 72);
+  assert.equal(parseHeartRate(new DataView(new Uint8Array([0x01, 0x2c, 0x01]).buffer)), 300);
+  assert.equal(parseHeartRate(new DataView(new Uint8Array([0x00]).buffer)), 0);
+  let stats = hrStats(null, 100);
+  stats = hrStats(stats, 140);
+  stats = hrStats(stats, 0);
+  assert.deepEqual(stats, { n: 2, avg: 120, max: 140 });
+});
+
+test('health readings are totalled; the newest weight wins', () => {
+  const s = summarise({
+    steps: [{ value: 4000 }, { value: 2500 }],
+    distance: [{ value: 3210 }],
+    heartRate: [{ value: 60 }, { value: 100 }],
+    weight: [{ value: 80.04, startDate: '2026-01-01' }, { value: 79.26, startDate: '2026-02-01' }],
+  });
+  assert.deepEqual(s, { steps: 6500, calories: 0, km: 3.21, hrAvg: 80, hrMax: 100, weight: 79.3 });
+});
