@@ -1,0 +1,26 @@
+{
+  "appId": "com.gussaay.thedisciplined",
+  "appName": "الملتزم",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 900,
+      "launchAutoHide": true,
+      "backgroundColor": "#0F3D3E",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0F3D3E"
+    },
+    "LocalNotifications": {
+      "iconColor": "#0F3D3E"
+    }
+  },
+  "android": {
+    "adjustMarginsForEdgeToEdge": "force"
+  }
+}

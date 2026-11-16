@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="./icon-192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0F3D3E" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="description" content="The Disciplined · الملتزم - commit to your goals: training, food, prayer, people and English" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <script>
+      // Language, direction and appearance are applied before the first paint.
+      try {
+        var s = JSON.parse(localStorage.getItem('td:settings') || '{}');
+        var lang = s.lang || ((navigator.language || '').toLowerCase().indexOf('ar') === 0 ? 'ar' : 'en');
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+        var t = s.theme;
+        if (t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      } catch (e) {}
+    </script>
+    <title>The Disciplined · الملتزم</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
