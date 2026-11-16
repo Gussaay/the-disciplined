@@ -4,10 +4,13 @@
 // empty arrays and refuses some key characters (dates with dots, etc.).
 import { onValue, ref, set } from 'firebase/database';
 import { db } from '../firebase';
-import { SYNC_KEYS, changedAt, onLocalChange, read, resolve, write } from './store';
+import { SYNC_KEYS, changedAt, claimFor, onLocalChange, read, resolve, write } from './store';
 
 export function startSync(uid) {
   if (!db || !uid) return () => {};
+  // Another account's records left on this device are cleared before anything
+  // is compared, so they are never uploaded into this account.
+  claimFor(uid);
   const node = (key) => ref(db, `users/${uid}/data/${key}`);
   const push = (key, value, t) =>
     set(node(key), value === undefined ? null : { json: JSON.stringify(value), t }).catch(() => {});

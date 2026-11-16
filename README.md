@@ -122,21 +122,47 @@ AI estimates of food portions can be off; the grams can be corrected before addi
   from their own apps. Android 14 has Health Connect built in; older versions
   install it from Google Play.
 
-## Cloud backup and accounts (optional)
+## Cloud backup and accounts
 
-1. Create a Firebase project. Turn on Authentication (Email/Password, and Google
-   for the web) and Realtime Database.
-2. Register a Web app in the project and copy its config into `.env`
-   (see `.env.example`), and into the repository **variables** of the same
-   names so CI builds have them: `VITE_FIREBASE_API_KEY`,
-   `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_DATABASE_URL`,
-   `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`.
-3. For automatic deploys add the variable `FIREBASE_PROJECT_ID` and the secret
-   `FIREBASE_SERVICE_ACCOUNT` (a service-account JSON key with the Firebase
-   Hosting Admin and Firebase Realtime Database Admin roles). Each push to
-   `main` then deploys the site and `database.rules.json`.
+The app is already pointed at its own Firebase project, **disciplined-3e309**
+(`src/firebase.js`; a web config is an identifier, not a secret). To switch the
+cloud on, in the Firebase console of that project:
 
-The rules let each person read and write only their own data.
+1. **Authentication** > Sign-in method: turn on Email/Password and Google.
+2. **Realtime Database** > Create database. If its URL is not
+   `https://disciplined-3e309-default-rtdb.europe-west1.firebasedatabase.app` (another region),
+   set the repository variable `VITE_FIREBASE_DATABASE_URL` to the real one.
+3. Authentication > Settings > Authorized domains: add `gussaay.github.io` if
+   the web app is served from GitHub Pages.
+4. Publish the rules in `database.rules.json` (the deploy below does it).
+
+Until step 2 is done the app keeps working on the device and sign-in is the only
+thing that fails.
+
+### Repository secrets
+
+Settings > Secrets and variables > Actions > New repository secret. GitHub never
+shows secret values again and nothing outside your own browser can add them.
+
+| Secret | What it is |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT_DISCIPLINED` (or `FIREBASE_SERVICE_ACCOUNT`) | The whole JSON of a service-account key for disciplined-3e309 (Firebase console > Project settings > Service accounts > Generate new private key; paste the file's contents). Each push to `main` then deploys Hosting and the database rules. |
+| `KEYSTORE_BASE64` | Your Android signing key, base64 (below). |
+| `KEYSTORE_PASSWORD` | The keystore password. |
+| `KEY_PASSWORD` | The key password (omit if it equals the keystore password). |
+| `KEY_ALIAS` | The key alias (omit if the keystore holds one key; it is found automatically). |
+| `GEMINI_API_KEY`, `GROQ_API_KEY` | Only for deploying the AI function (`firebase functions:secrets:set`, see "AI"); not read by the workflow. |
+
+Signing key, once, on your computer:
+
+```bash
+keytool -genkeypair -v -keystore the-disciplined.keystore -alias disciplined \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 the-disciplined.keystore      # paste this as KEYSTORE_BASE64
+```
+
+Keep a copy of the keystore and its passwords somewhere safe: if they are lost,
+phones that installed the app can only update after uninstalling it.
 
 Without any of this, Settings > "Save a backup" writes everything to one file
 that "Restore" reads on another phone.

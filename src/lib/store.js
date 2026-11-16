@@ -115,6 +115,45 @@ export function resolve(localTime, hasLocal, remote) {
   return 'same';
 }
 
+/**
+ * Whose data the synced keys on this device belong to. Signing in for the
+ * first time adopts what was recorded on the device; a different account
+ * signing in later must not inherit (or upload) the previous person's data.
+ */
+export function ownerAction(previous, uid) {
+  if (!previous) return 'adopt';
+  return previous === uid ? 'same' : 'reset';
+}
+
+const OWNER = 'td~owner';
+
+/** Called by the sync layer before it starts for `uid`. Returns the action taken. */
+export function claimFor(uid) {
+  let previous = null;
+  try {
+    previous = storage().getItem(OWNER);
+  } catch { /* blocked */ }
+  const action = ownerAction(previous, uid);
+  if (action === 'reset') {
+    for (const key of [...SYNC_KEYS, 'gymActive']) {
+      cache.set(key, undefined);
+      try {
+        storage().removeItem(PREFIX + key);
+      } catch { /* blocked */ }
+      listeners.get(key)?.forEach((fn) => fn());
+    }
+    try {
+      const kept = times();
+      for (const key of SYNC_KEYS) delete kept[key];
+      storage().setItem(META, JSON.stringify(kept));
+    } catch { /* blocked */ }
+  }
+  try {
+    storage().setItem(OWNER, uid);
+  } catch { /* blocked */ }
+  return action;
+}
+
 /** Tests only. */
 export function resetStore() {
   cache.clear();

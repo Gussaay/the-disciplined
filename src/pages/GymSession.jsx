@@ -74,6 +74,7 @@ export default function GymSession() {
   const [sessions, setSessions] = useStore('gymSessions', EMPTY);
   const [profile] = useStore('profile', NONE);
   const [settings, setSettings] = useStore('settings', NONE);
+  const [plan, setPlan] = useStore('gymPlan', null);
   const [adding, setAdding] = useState(false);
   const [howFor, setHowFor] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -170,6 +171,7 @@ export default function GymSession() {
     let newRecords = 0;
     for (const e of done.exercises) if (e.sets.some((s) => isRecord(records, e.exerciseId, s))) newRecords += 1;
     setSessions([done, ...sessions]);
+    if (plan && done.planDay !== undefined) setPlan({ ...plan, next: done.planDay + 1 });
     setSummary({
       minutes: sessionMinutes(done),
       sets: sessionSets(done),
