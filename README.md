@@ -1,5 +1,159 @@
 # The Disciplined · الملتزم
 
-An app that helps you commit to your goals: training, food, prayer, people and English.
+An app that helps you commit to your goals, one place for five of them:
 
-The app itself arrives with the first pull request.
+| Goal | What it does |
+|---|---|
+| 🏋️ **Training** | Pick a machine, or take a photo of it and let the AI recognise it, to see the exercises and how to do them. Log sets, reps and weight with a rest timer, see what you did last time and what to aim for today, records, weekly charts, ready-made and AI-written programmes. Live heart rate from a watch or strap, and the day's steps, calories and heart rate from the watch through Health Connect. |
+| 🥗 **Healthy food** | Daily targets worked out from your weight, height, age, activity and goal. Add food from a list of 110 foods (Sudanese, Gulf and everyday), from a photo of the plate, from a description in words, or from a packet label. Calories, protein, carbohydrate, fat, sugar and fibre against targets, water, suggestions for what to eat next, and your own template day that is logged with one tap. |
+| 🕌 **Prayer** | The five prayer times for your place (calculated on the device), each prayer marked on time, late or missed, and whether it was in the mosque. Weekly view and streak, Qibla direction, the full Quran with translation, bookmark and a daily reading goal, the azkar of Hisn al-Muslim with counters, and a tasbih counter. |
+| 🤝 **Keeping in touch** | Family, relatives and friends, how often you want to reach each one, who is due now, call and WhatsApp buttons, a history of calls, visits and messages. |
+| 🔤 **English** | A daily plan built from your level and minutes a day, vocabulary with spaced repetition, an AI tutor to talk to, AI correction of your writing, streak and progress. |
+
+The home screen shows the day's commitment across the goals and the streak.
+Everything is in **Arabic and English**, right-to-left in Arabic, light and dark.
+
+## Same architecture as Easy Pedia
+
+One codebase for the web and the phone, the same stack and layout as
+`Gussaay/eaay-pedia-app`:
+
+Vite + React 18 + Tailwind 3 + Firebase JS SDK + Capacitor 7 + PWA (vite-plugin-pwa).
+
+```
+src/
+  pages/        one file per screen (Home, Gym, GymSession, Food, Prayer, Quran, Azkar, Social, English, Settings)
+  components/   shared pieces (ui.jsx, BottomNav, AddFood, ExercisePicker, Ai)
+  hooks/        useStore (saved state), useAuth, useTheme, useReminders
+  lib/          the logic, free of React, with unit tests beside it (*.test.js)
+  data/         the gym catalogue, the food table, the word lists, the surah index
+  i18n/         Arabic / English
+functions/      Cloud Function that answers AI requests (key kept on the server)
+android/        the Capacitor Android project
+public/         icons, the Quran (one file per surah), the azkar
+```
+
+Two things differ from Easy Pedia, on purpose:
+
+- **The device comes first.** Everything you record is saved on the phone
+  (`src/lib/store.js`), so the app works with no account and no connection.
+  Firebase is optional: when it is configured, signing in mirrors the same data
+  to `users/<uid>/data` (`src/lib/sync.js`) and it follows you across devices.
+- **Texts are written side by side**, `L('Start workout', 'ابدأ التمرين')`, so a
+  screen cannot ship with a missing translation.
+
+## Commands
+
+```bash
+npm install
+npm run dev              # http://localhost:5173
+npm test                 # unit tests for the logic in src/lib
+npm run build            # production web build -> dist/
+npm run mobile:sync      # build + copy web assets into android/
+npm run mobile:open      # open android/ in Android Studio (JDK 21)
+npm run deploy:web       # build + firebase deploy --only hosting
+node scripts/make-icons.mjs && npx @capacitor/assets generate --android   # redraw the icons
+```
+
+## Getting the app
+
+**Android.** Every push builds an APK (`.github/workflows/deploy.yml`):
+
+- from a pull request or branch: GitHub > Actions > the run > Artifacts > `android-apk`;
+- from `main`: a permanent link,
+  `https://github.com/Gussaay/the-disciplined/releases/latest/download/the-disciplined.apk`.
+
+Open the file on the phone and allow installing from this source. Until the
+signing secrets below exist the APK is a debug build whose key changes on each
+build, so Android asks you to uninstall the previous build before a newer one
+(save a backup in Settings first). To get builds that update in place, create a
+keystore once and add four repository secrets:
+
+```bash
+keytool -genkey -v -keystore release.keystore -alias disciplined -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 release.keystore     # -> secret KEYSTORE_BASE64
+# secrets: KEYSTORE_PASSWORD, KEY_ALIAS (disciplined), KEY_PASSWORD
+```
+
+**Web.** Two ways, both from `main`:
+
+- *GitHub Pages (no account needed):* repository Settings > Pages > Source:
+  **GitHub Actions**. The next push publishes
+  `https://gussaay.github.io/the-disciplined/`. (Pages on a private repository
+  needs a paid GitHub plan.)
+- *Firebase Hosting:* see "Cloud backup" below.
+
+On a phone browser, "Add to Home screen" installs the web app; it then works
+offline, including the Quran and azkar once opened.
+
+## AI
+
+AI is used for: recognising gym equipment and food from photos, working out
+nutrients from a description, meal ideas, writing a training programme, the
+English tutor and writing correction. Everything else works without it.
+
+- **Simplest:** Settings > AI > paste a Gemini key (free at
+  <https://aistudio.google.com/apikey>). It is stored on that device only and
+  requests go straight from the device to Google.
+- **For everyone who signs in:** deploy the Cloud Function so the key stays on
+  the server (needs the Firebase project below, on the Blaze plan):
+
+  ```bash
+  firebase functions:secrets:set GEMINI_API_KEY
+  firebase functions:secrets:set GROQ_API_KEY     # optional text backup
+  cd functions && npm install && cd ..
+  firebase deploy --only functions
+  ```
+
+  Each account gets 60 AI requests a day (`AI_DAILY_LIMIT` in `functions/.env`).
+
+AI estimates of food portions can be off; the grams can be corrected before adding.
+
+## Smartwatch
+
+- **Live heart rate during a workout:** the Watch button in a workout connects
+  over Bluetooth to anything that offers the standard heart-rate service: chest
+  straps, and watches with "broadcast heart rate" switched on (Garmin, Polar,
+  Coros, Amazfit, Huawei and others). Works in the Android app and in Chrome or
+  Edge on the web. Apple Watch and Fitbit do not broadcast heart rate.
+- **Steps, calories, distance, heart rate, weight for the day:** "Read from my
+  watch" on the Training screen reads Health Connect (Android app only). Wear
+  OS, Galaxy Watch, Fitbit, Garmin, Xiaomi and others write their data there
+  from their own apps. Android 14 has Health Connect built in; older versions
+  install it from Google Play.
+
+## Cloud backup and accounts (optional)
+
+1. Create a Firebase project. Turn on Authentication (Email/Password, and Google
+   for the web) and Realtime Database.
+2. Register a Web app in the project and copy its config into `.env`
+   (see `.env.example`), and into the repository **variables** of the same
+   names so CI builds have them: `VITE_FIREBASE_API_KEY`,
+   `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_DATABASE_URL`,
+   `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`.
+3. For automatic deploys add the variable `FIREBASE_PROJECT_ID` and the secret
+   `FIREBASE_SERVICE_ACCOUNT` (a service-account JSON key with the Firebase
+   Hosting Admin and Firebase Realtime Database Admin roles). Each push to
+   `main` then deploys the site and `database.rules.json`.
+
+The rules let each person read and write only their own data.
+
+Without any of this, Settings > "Save a backup" writes everything to one file
+that "Restore" reads on another phone.
+
+## Reminders
+
+In the Android app, Settings > Reminders schedules prayer-time notifications for
+today and tomorrow (refreshed each time the app opens), an evening nudge when
+someone is due a call, and an English reminder. They are scheduled on the
+phone, so they arrive with no connection.
+
+## Sources
+
+- Prayer times and Qibla: the [adhan](https://github.com/batoulapps/adhan-js) library (MIT).
+- Quran: Uthmani text from the Noble Qur'an Encyclopedia (quranenc.com) and the
+  Saheeh International translation via tanzil.net, as packaged by
+  [quran-json](https://github.com/risan/quran-json) (CC BY-SA 4.0).
+- Azkar: Hisn al-Muslim, from [rn0x/Adhkar-json](https://github.com/rn0x/Adhkar-json).
+- Food values: rounded from standard food composition tables; estimates for
+  daily tracking, not medical advice. Targets use the Mifflin-St Jeor equation.
