@@ -38,8 +38,10 @@ export default function Gym() {
   const goal = Number(profile.gymDays) || 3;
   const records = Object.keys(personalRecords(sessions)).length;
 
-  const start = (name, exercises) => {
-    setActive(newSession(name, exercises, sessions));
+  // `planDay` rides on the workout so the programme moves on only once the
+  // workout is really saved (GymSession), not when it is merely started.
+  const start = (name, exercises, planDay) => {
+    setActive({ ...newSession(name, exercises, sessions), ...(planDay === undefined ? {} : { planDay }) });
     navigate('/gym/session');
   };
 
@@ -132,8 +134,7 @@ export default function Gym() {
               <button
                 className="btn-primary mt-3 w-full"
                 onClick={() => {
-                  setPlan({ ...plan, next: nextIndex + 1 });
-                  start(nextDay.name?.en ? pick(nextDay.name) : nextDay.name, nextDay.exercises.map((id) => EXERCISES[id]).filter(Boolean));
+                  start(nextDay.name?.en ? pick(nextDay.name) : nextDay.name, nextDay.exercises.map((id) => EXERCISES[id]).filter(Boolean), nextIndex);
                 }}
               >
                 <Play size={18} /> {L('Start this day', 'ابدأ هذا اليوم')}

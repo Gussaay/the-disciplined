@@ -8,8 +8,8 @@ name: Test, build web and APK
 #        https://github.com/Gussaay/the-disciplined/releases/latest/download/the-disciplined.apk
 #   4. publishes the web app to GitHub Pages (needs Settings > Pages > Source:
 #      "GitHub Actions" once; until then that job is skipped over),
-#   5. deploys to Firebase Hosting when the FIREBASE_SERVICE_ACCOUNT secret and
-#      the FIREBASE_PROJECT_ID variable exist (see README, "Cloud backup").
+#   5. deploys Firebase Hosting and the database rules (project disciplined-3e309)
+#      when the FIREBASE_SERVICE_ACCOUNT secret exists (see README).
 on:
   push:
     branches:
@@ -116,12 +116,19 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          # KEY_ALIAS is optional: with one key in the keystore it is found here.
+          ALIAS="$KEY_ALIAS"
+          if [ -z "$ALIAS" ]; then
+            ALIAS=$(keytool -list -keystore "$RUNNER_TEMP/release.keystore" -storepass "$KEYSTORE_PASSWORD" 2>/dev/null \
+              | sed -n 's/^\([^,]*\),.*PrivateKeyEntry.*/\1/p' | head -1)
+          fi
+          [ -n "$ALIAS" ] || { echo "::error::No key alias found. Add the KEY_ALIAS secret."; exit 1; }
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.keystore" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.alias="$ALIAS" \
             -Pandroid.injected.signing.key.password="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
           cp app/build/outputs/apk/release/app-release.apk "../$APK_NAME"
           rm -f "$RUNNER_TEMP/release.keystore"
@@ -194,8 +201,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: web
     env:
-      HAS_FIREBASE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' && vars.FIREBASE_PROJECT_ID != '' }}
-      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      HAS_FIREBASE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'disciplined-3e309' }}
     steps:
       - uses: actions/checkout@v4
         if: env.HAS_FIREBASE == 'true'
@@ -218,4 +225,4 @@ jobs:
           rm -f "$RUNNER_TEMP/sa.json"
       - name: Not set up
         if: env.HAS_FIREBASE != 'true'
-        run: echo "Firebase is not configured (no FIREBASE_SERVICE_ACCOUNT secret / FIREBASE_PROJECT_ID variable). Skipped."
+        run: echo "Firebase is not configured (no FIREBASE_SERVICE_ACCOUNT secret). Skipped."

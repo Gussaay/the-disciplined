@@ -5,7 +5,7 @@ import { PRAYERS, countdown, daySummary, prayerNow, prayerStreak, prayerTimes, q
 import { dueInfo, logContact, socialScore, sortByDue, whatsappLink } from './social.js';
 import { dayPlan, dayProgress, dueWords, newWords, reviewWord, studyStreak, wordStats } from './english.js';
 import { commitment } from './score.js';
-import { exportAll, importAll, read, resetStore, resolve, update, write, changedAt } from './store.js';
+import { claimFor, exportAll, importAll, ownerAction, read, resetStore, resolve, update, write, changedAt } from './store.js';
 
 test('dates: keys, adding days across months, streaks', () => {
   assert.equal(dayKey(new Date(2026, 0, 5, 23, 30)), '2026-01-05');
@@ -173,4 +173,22 @@ test('sync: the newer side wins, an empty side never overwrites', () => {
   assert.equal(resolve(300, true, null), 'push');
   assert.equal(resolve(0, false, null), 'same');
   assert.equal(resolve(200, true, { t: 200 }), 'same');
+});
+
+test('a second account on the same device does not inherit the first one\'s data', () => {
+  resetStore();
+  assert.equal(ownerAction(null, 'a'), 'adopt');
+  assert.equal(ownerAction('a', 'a'), 'same');
+  assert.equal(ownerAction('a', 'b'), 'reset');
+  write('contacts', [{ id: 1 }]);
+  write('settings', { lang: 'ar' });
+  assert.equal(claimFor('a'), 'adopt');
+  assert.equal(read('contacts').length, 1);
+  assert.equal(claimFor('a'), 'same');
+  assert.equal(read('contacts').length, 1);
+  assert.equal(claimFor('b'), 'reset');
+  assert.equal(read('contacts'), undefined);
+  assert.equal(changedAt('contacts'), 0);
+  // What never syncs (language, theme) stays with the device.
+  assert.deepEqual(read('settings'), { lang: 'ar' });
 });
