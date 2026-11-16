@@ -157,13 +157,13 @@ export function Meter({ label, value, target, unit = '', color = '#1D6059', warn
 export function Bars({ data, color = '#1D6059', height = 72, format = (v) => v }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
-    <div className="flex items-end gap-1.5" style={{ height: height + 22 }}>
+    <div className="flex items-end gap-1.5">
       {data.map((d, i) => (
         <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-1" title={`${d.label}: ${format(d.value)}`}>
-          <div className="flex w-full flex-1 items-end">
+          <div className="flex w-full items-end" style={{ height }}>
             <div
               className="w-full rounded-t-md transition-all duration-500"
-              style={{ height: `${Math.max(d.value ? 6 : 2, (d.value / max) * 100)}%`, background: d.value ? color : 'rgba(120,130,130,0.25)', opacity: d.mark === false ? 0.45 : 1 }}
+              style={{ height: Math.max(d.value ? 5 : 2, Math.round((d.value / max) * height)), background: d.value ? color : 'rgba(120,130,130,0.25)', opacity: d.mark === false ? 0.45 : 1 }}
             />
           </div>
           <span className="muted w-full truncate text-center text-[11px]">{d.label}</span>

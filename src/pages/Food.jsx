@@ -140,7 +140,7 @@ export default function Food() {
           </div>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-brand-900/10 pt-3 dark:border-white/10">
-          <Meter label={L('Sugar (limit)', 'السكر (حد أقصى)')} value={eaten.sugar} target={targets.sugar} unit={L('g', 'جم')} color="#D9622B" warnOver />
+          <Meter label={L('Sugar', 'السكر')} value={eaten.sugar} target={targets.sugar} unit={L('g', 'جم')} color="#D9622B" warnOver />
           <Meter label={L('Fibre', 'الألياف')} value={eaten.fiber} target={targets.fiber} unit={L('g', 'جم')} color={COLOR} />
         </div>
         <p className="muted mt-3 text-xs">
