@@ -152,6 +152,14 @@ export default function Food() {
           <Meter label={L('Sugar', 'السكر')} value={eaten.sugar} target={targets.sugar} unit={L('g', 'جم')} color="#D9622B" warnOver />
           <Meter label={L('Fibre', 'الألياف')} value={eaten.fiber} target={targets.fiber} unit={L('g', 'جم')} color={COLOR} />
         </div>
+        {eaten.unknown?.some((k) => k === 'sugar' || k === 'fiber') && (
+          <p className="muted mt-2 text-xs">
+            {L(
+              `Some foods today do not report their ${eaten.unknown.filter((k) => k === 'sugar' || k === 'fiber').map((k) => (k === 'sugar' ? 'sugar' : 'fibre')).join(' or ')}, so that total is at least the amount shown.`,
+              `بعض أطعمة اليوم لا تذكر ${eaten.unknown.filter((k) => k === 'sugar' || k === 'fiber').map((k) => (k === 'sugar' ? 'السكر' : 'الألياف')).join(' أو ')}، لذا فالمجموع لا يقل عن الرقم المعروض.`,
+            )}
+          </p>
+        )}
         <p className="muted mt-3 text-xs">
           {L(
             `Target ${num(targets.kcal)} kcal from your weight, height, age, activity and goal`,
