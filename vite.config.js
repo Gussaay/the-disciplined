@@ -34,6 +34,17 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
+            // The food database: fetched the first time it is opened, then
+            // kept for offline use. A new release uses a new file name.
+            urlPattern: ({ url }) => /\/nutrition\/foods-v\d+\.json$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'nutrition',
+              expiration: { maxEntries: 4 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
             // The Quran (one file per surah) and the azkar: fetched once, then
             // always read from the device, so they work with no connection.
             urlPattern: ({ url }) => /\/(quran\/\d+|azkar)\.json$/.test(url.pathname),

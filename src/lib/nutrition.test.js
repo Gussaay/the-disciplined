@@ -60,3 +60,11 @@ test('bmi bands', () => {
   assert.equal(bmi(100, 170).band, 'obese');
   assert.equal(bmi(0, 170), null);
 });
+
+test('totals say which numbers are only a floor because a food did not report them', async () => {
+  const { totals } = await import('./nutrition.js');
+  const t = totals([{ grams: 100, kcal: 100, sugar: 0, unknown: ['sugar'] }, { grams: 50, kcal: 50, sugar: 3 }]);
+  assert.deepEqual(t.unknown, ['sugar']);
+  assert.equal(t.sugar, 3);
+  assert.equal(totals([{ grams: 50, kcal: 50, sugar: 3 }]).unknown, undefined);
+});

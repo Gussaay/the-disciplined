@@ -12,3 +12,14 @@ export const GOALS = [
 ];
 
 export const goalById = (id) => GOALS.find((g) => g.id === id);
+
+// Google sign-in inside the Android app needs the OAuth "Web client ID" of the
+// Firebase project (Authentication > Sign-in method > Google > Web SDK
+// configuration). It is an identifier, not a secret. Empty = the Google button
+// shows on the website only.
+export const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || '';
+
+// Where CI publishes the over-the-air bundle and the APK version file
+// (Firebase Hosting of disciplined-3e309).
+export const UPDATE_SITE = (import.meta.env.VITE_UPDATE_SITE || 'https://disciplined-3e309.web.app').replace(/\/$/, '');
+export const APK_LATEST_URL = 'https://github.com/Gussaay/the-disciplined/releases/latest/download/the-disciplined.apk';

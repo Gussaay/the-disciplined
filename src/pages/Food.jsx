@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, ClipboardCopy, Droplets, Minus, Plus, Sparkles, X } from 'lucide-react';
+import { BookmarkPlus, ChevronLeft, ChevronRight, ClipboardCopy, Database, Droplets, Minus, Plus, Sparkles, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { Bars, Meter, Page, Ring, Section, Segmented, Sheet, useToast } from '../components/ui';
 import AddFood, { MacroLine } from '../components/AddFood';
+import { SaveMeal, formatAmount } from '../components/FoodDatabase';
+import { DAILY_VALUE, MICRO_GROUPS, NUTRIENT_NAMES, microTotals } from '../lib/foodDb';
 import { useAiError } from '../components/Ai';
 import { FOODS, MEALS } from '../data/foods';
 import { bmi, dailyTargets, remaining, suggest, totals } from '../lib/nutrition';
@@ -36,6 +39,7 @@ export default function Food() {
   const [addTo, setAddTo] = useState(null);
   const [ideas, setIdeas] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(null);
 
   const today = dayKey();
   const planning = view === 'plan';
@@ -78,6 +82,11 @@ export default function Food() {
 
   return (
     <Page
+      action={
+        <Link to="/food/database" className="btn-soft !min-h-[40px] !px-3 text-sm">
+          <Database size={16} /> {L('Foods', 'الأغذية')}
+        </Link>
+      }
       title={L('Healthy food', 'الغذاء الصحي')}
       subtitle={planning ? L('Your template day', 'يومك النموذجي') : day === today ? L('Today', 'اليوم') : date(fromKey(day))}
     >
@@ -143,6 +152,14 @@ export default function Food() {
           <Meter label={L('Sugar', 'السكر')} value={eaten.sugar} target={targets.sugar} unit={L('g', 'جم')} color="#D9622B" warnOver />
           <Meter label={L('Fibre', 'الألياف')} value={eaten.fiber} target={targets.fiber} unit={L('g', 'جم')} color={COLOR} />
         </div>
+        {eaten.unknown?.some((k) => k === 'sugar' || k === 'fiber') && (
+          <p className="muted mt-2 text-xs">
+            {L(
+              `Some foods today do not report their ${eaten.unknown.filter((k) => k === 'sugar' || k === 'fiber').map((k) => (k === 'sugar' ? 'sugar' : 'fibre')).join(' or ')}, so that total is at least the amount shown.`,
+              `بعض أطعمة اليوم لا تذكر ${eaten.unknown.filter((k) => k === 'sugar' || k === 'fiber').map((k) => (k === 'sugar' ? 'السكر' : 'الألياف')).join(' أو ')}، لذا فالمجموع لا يقل عن الرقم المعروض.`,
+            )}
+          </p>
+        )}
         <p className="muted mt-3 text-xs">
           {L(
             `Target ${num(targets.kcal)} kcal from your weight, height, age, activity and goal`,
@@ -167,6 +184,8 @@ export default function Food() {
         </div>
       )}
 
+      {entries.length > 0 && <MicroPanel entries={entries} />}
+
       {MEALS.map((meal) => {
         const items = entries.filter((e) => e.meal === meal.id);
         const sum = totals(items);
@@ -175,9 +194,16 @@ export default function Food() {
             key={meal.id}
             title={`${meal.icon} ${pick(meal.name)}${sum.kcal ? ` · ${num(sum.kcal)} ${L('kcal', 'سعرة')}` : ''}`}
             action={
-              <button className="btn-soft !min-h-[36px] !px-3 text-sm" onClick={() => setAddTo(meal.id)}>
-                <Plus size={16} /> {L('Add', 'إضافة')}
-              </button>
+              <div className="flex gap-1">
+                {items.length > 0 && (
+                  <button className="btn-ghost !min-h-[36px] !px-2 text-sm" aria-label={L('Save as a meal', 'احفظها كوجبة')} title={L('Save as a meal', 'احفظها كوجبة')} onClick={() => setSaving(items)}>
+                    <BookmarkPlus size={16} />
+                  </button>
+                )}
+                <button className="btn-soft !min-h-[36px] !px-3 text-sm" onClick={() => setAddTo(meal.id)}>
+                  <Plus size={16} /> {L('Add', 'إضافة')}
+                </button>
+              </div>
             }
           >
             {items.length > 0 && (
@@ -258,6 +284,21 @@ export default function Food() {
         onAdd={(items) => add(addTo, items)}
       />
 
+      <Sheet open={Boolean(saving)} onClose={() => setSaving(null)} title={L('Save as a meal', 'احفظها كوجبة')}>
+        {saving && (
+          <>
+            <p className="muted text-sm">{saving.map((i) => `${pick(i.name)} ${Math.round(i.grams)} ${L('g', 'جم')}`).join(L(', ', '، '))}</p>
+            <SaveMeal
+              items={saving}
+              onDone={() => {
+                setSaving(null);
+                toast(L('Saved. Find it under “My meals” when adding food.', 'حُفظت. تجدها في «وجباتي» عند إضافة طعام.'));
+              }}
+            />
+          </>
+        )}
+      </Sheet>
+
       <Sheet open={Boolean(ideas)} onClose={() => setIdeas(null)} title={L('Meal ideas', 'أفكار وجبات')}>
         {(ideas || []).map((idea) => {
           const sum = totals(idea.items);
@@ -281,5 +322,58 @@ export default function Food() {
         })}
       </Sheet>
     </Page>
+  );
+}
+
+const UNITS = { g: 'g', mg: 'mg', ug: 'ug' };
+const unitOf = (key) => UNITS[key.split('_').pop()] || 'g';
+
+/** Vitamins, minerals and fat types for the day, from database foods. */
+function MicroPanel({ entries }) {
+  const { L } = useLang();
+  const keys = MICRO_GROUPS.flatMap((g) => g.keys);
+  const sums = microTotals(entries, keys);
+  const fromDb = entries.filter((e) => e.micro).length;
+  return (
+    <details className="card group">
+      <summary className="flex cursor-pointer list-none items-center justify-between font-bold">
+        {L('Vitamins, minerals and fats', 'الفيتامينات والمعادن والدهون')}
+        <span className="muted text-sm font-normal">{L(`${fromDb} of ${entries.length} items with full data`, `${fromDb} من ${entries.length} أصناف ببيانات كاملة`)}</span>
+      </summary>
+      <div className="mt-3 space-y-4">
+        {MICRO_GROUPS.map((group) => (
+          <div key={group.id}>
+            <p className="eyebrow mb-1">{L(...group.name)}</p>
+            {group.keys.map((key) => {
+              const { value, missing } = sums[key];
+              const dv = DAILY_VALUE[key];
+              const share = dv ? value / dv : 0;
+              return (
+                <div key={key} className="py-1">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span>{L(...NUTRIENT_NAMES[key])}</span>
+                    <span className="tabular">
+                      {missing ? '≥ ' : ''}{formatAmount(value, unitOf(key), L)}
+                      {dv ? <span className="muted"> · {Math.round(share * 100)}%</span> : null}
+                    </span>
+                  </div>
+                  {dv && (
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-brand-900/10 dark:bg-white/10">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, share * 100)}%`, background: key === 'sodium_mg' || key === 'saturated_fat_g' || key === 'cholesterol_mg' ? (share > 1 ? '#DC2626' : '#D9622B') : COLOR }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        <p className="muted text-xs">
+          {L(
+            '“≥” means some items have no value for it (foods added from the quick list, a photo or a description carry only the main numbers). % is of the reference daily value on food labels, for scale, not a personal target.',
+            '«≥» تعني أن بعض الأصناف ليس لها قيمة لهذا العنصر (الأطعمة المضافة من القائمة السريعة أو الصورة أو الوصف تحمل القيم الرئيسية فقط). النسبة من القيمة اليومية المرجعية في ملصقات الأغذية للمقارنة، وليست هدفاً شخصياً.',
+          )}
+        </p>
+      </div>
+    </details>
   );
 }

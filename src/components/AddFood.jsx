@@ -11,6 +11,7 @@ import { askAI, aiAvailable } from '../lib/ai';
 import { foodPhotoPrompt, foodTextPrompt, readFoods } from '../lib/aiPrompts';
 import { AiSetupNote, PhotoButton, useAiError } from './Ai';
 import { Field, NumberInput, Segmented, Sheet } from './ui';
+import { FromDatabase, MyMeals } from './FoodDatabase';
 
 const EMPTY = [];
 
@@ -316,13 +317,17 @@ export default function AddFood({ open, onClose, onAdd, title }) {
         value={tab}
         onChange={setTab}
         options={[
-          { value: 'list', label: L('List', 'القائمة'), icon: '📋' },
+          { value: 'list', label: L('Quick list', 'القائمة السريعة'), icon: '📋' },
+          { value: 'db', label: L('Database', 'قاعدة الأغذية'), icon: '🔎' },
+          { value: 'meals', label: L('My meals', 'وجباتي'), icon: '🍱' },
           { value: 'photo', label: L('Photo', 'صورة'), icon: '📷' },
           { value: 'text', label: L('Describe', 'وصف'), icon: '✍️' },
           { value: 'label', label: L('Label', 'ملصق'), icon: '🏷️' },
         ]}
       />
       {tab === 'list' && <FromList onAdd={onAdd} />}
+      {tab === 'db' && <FromDatabase onAdd={onAdd} />}
+      {tab === 'meals' && <MyMeals onAdd={onAdd} />}
       {tab === 'photo' && <FromAi key="photo" mode="photo" onAdd={onAdd} />}
       {tab === 'text' && <FromAi key="text" mode="text" onAdd={onAdd} />}
       {tab === 'label' && <FromLabel onAdd={onAdd} />}

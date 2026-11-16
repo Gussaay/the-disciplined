@@ -10,7 +10,17 @@ An app that helps you commit to your goals, one place for five of them:
 | 🤝 **Keeping in touch** | Family, relatives and friends, how often you want to reach each one, who is due now, call and WhatsApp buttons, a history of calls, visits and messages. |
 | 🔤 **English** | A daily plan built from your level and minutes a day, vocabulary with spaced repetition, an AI tutor to talk to, AI correction of your writing, streak and progress. |
 
-The home screen shows the day's commitment across the goals and the streak.
+The home screen shows the day's commitment across the goals and the streak,
+and the **dashboard** shows every goal over a week, a month or three months.
+
+**Food database.** 7,000+ foods from USDA FoodData Central (SR Legacy, final
+April 2018 release), searchable in Arabic and English and listed by food group,
+with calories, macronutrients and 18 micronutrients per 100 g. Pork and alcohol
+are left out. Unknown values stay unknown (a day total that includes them shows
+"≥"). Foods logged from it keep a snapshot of their values. Several items can be
+saved as a meal and logged in one tap. Rebuild the file with
+`node scripts/build-nutrition.mjs <nutrition-database/data/foods.json>`;
+sources and licence are in `docs/nutrition-database/`.
 Everything is in **Arabic and English**, right-to-left in Arabic, light and dark.
 
 ## Same architecture as Easy Pedia
@@ -93,8 +103,14 @@ nutrients from a description, meal ideas, writing a training programme, the
 English tutor and writing correction. Everything else works without it.
 
 - **Simplest:** Settings > AI > paste a Gemini key (free at
-  <https://aistudio.google.com/apikey>). It is stored on that device only and
-  requests go straight from the device to Google.
+  <https://aistudio.google.com/apikey>) and/or a Groq key (free at
+  <https://console.groq.com/keys>). They are stored on that device only and
+  requests go straight from the device to Google or Groq. With both, Groq
+  answers when Gemini fails or runs out of its daily allowance (Llama 4 Scout
+  for photos, Llama 3.3 70B for text).
+- **From GitHub:** add `GEMINI_API_KEY` and/or `GROQ_API_KEY` as repository
+  secrets; each push to `main` stores them in the function and deploys it
+  (needs the Blaze plan).
 - **For everyone who signs in:** deploy the Cloud Function so the key stays on
   the server (needs the Firebase project below, on the Blaze plan):
 
@@ -108,6 +124,38 @@ English tutor and writing correction. Everything else works without it.
   Each account gets 60 AI requests a day (`AI_DAILY_LIMIT` in `functions/.env`).
 
 AI estimates of food portions can be off; the grams can be corrected before adding.
+
+## Accounts
+
+The app opens on a sign-in screen: sign in, create an account (name, email,
+password, with a verification email), reset a forgotten password, or continue
+with Google. "Continue without an account" keeps everything on the phone, and
+signing in later from Settings adopts what was recorded.
+
+**Google sign-in in the Android app** needs two things from the Firebase console
+(it already works on the website once Google is enabled):
+
+1. Project settings > Your apps > the Android app `com.the.disciplined`: add the
+   SHA-1 of the signing key
+   (`keytool -list -v -keystore the-disciplined.keystore -alias disciplined`).
+2. Authentication > Sign-in method > Google > Web SDK configuration: copy the
+   **Web client ID** into the repository variable `VITE_GOOGLE_WEB_CLIENT_ID`.
+
+Until then the Google button shows on the website only.
+
+## Updates
+
+- **Website:** updates itself in the background (service worker).
+- **Android, over the air:** every push to `main` publishes the built app as a
+  zip with `latest/update.json` on Firebase Hosting. The app downloads it in the
+  background and uses it on the next start (Settings > App updates can check and
+  restart now). A bundle is installed only on an APK with the same native
+  fingerprint (`scripts/native-hash.mjs`: the android/ project, the Capacitor
+  config and plugin versions), so web code never runs on an APK missing a plugin.
+- **Android, new APK:** `native-version.json` lists the newest APK. When it is
+  newer than the installed one, the home screen offers the download.
+
+Both need the `FIREBASE_SERVICE_ACCOUNT_DISCIPLINED` secret (hosting deploy).
 
 ## Smartwatch
 
@@ -151,7 +199,7 @@ shows secret values again and nothing outside your own browser can add them.
 | `KEYSTORE_PASSWORD` | The keystore password. |
 | `KEY_PASSWORD` | The key password (omit if it equals the keystore password). |
 | `KEY_ALIAS` | The key alias (omit if the keystore holds one key; it is found automatically). |
-| `GEMINI_API_KEY`, `GROQ_API_KEY` | Only for deploying the AI function (`firebase functions:secrets:set`, see "AI"); not read by the workflow. |
+| `GEMINI_API_KEY`, `GROQ_API_KEY` | Optional. Deploys the AI Cloud Function with these keys, so signed-in users get AI with no key of their own (Blaze plan). |
 
 Signing key, once, on your computer:
 

@@ -1,6 +1,8 @@
-// One door to the AI. Two ways in:
+// One door to the AI. Three ways in:
 //   1. The person's own Gemini key, saved on this device only (Settings > AI).
 //      The request goes straight from the device to Google.
+//   1b. The person's own Groq key, also on this device only. Used when there
+//      is no Gemini key, or when Gemini fails (limit reached, model busy).
 //   2. The project's Cloud Function (functions/ai.js), when cloud backup is set
 //      up and the person is signed in. The key then stays on the server.
 // With neither, AI features explain how to turn them on; everything else in
@@ -9,6 +11,7 @@ import { httpsCallable } from 'firebase/functions';
 import { auth, functions } from '../firebase';
 import { read } from './store';
 import { parseJson } from './aiPrompts';
+import { GROQ_URL, groqBody } from './groq';
 
 const MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const URL = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -21,9 +24,32 @@ export class AiSetupError extends Error {
 }
 
 export const ownKey = () => String(read('device')?.geminiKey || '').trim();
+export const groqKey = () => String(read('device')?.groqKey || '').trim();
 
 export function aiAvailable() {
-  return Boolean(ownKey() || (functions && auth?.currentUser));
+  return Boolean(ownKey() || groqKey() || (functions && auth?.currentUser));
+}
+
+async function groq(key, request) {
+  let res;
+  try {
+    res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(groqBody(request)),
+    });
+  } catch {
+    throw new Error('No connection to the AI service');
+  }
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('The Groq key is not valid');
+    throw new Error(detail?.error?.message || `AI error ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error('The AI gave an empty answer');
+  return text;
 }
 
 function toContents({ prompt, image, messages }) {
@@ -81,9 +107,17 @@ async function direct(key, request) {
  */
 export async function askAI(request) {
   const key = ownKey();
+  const backup = groqKey();
   let text;
   if (key) {
-    text = await direct(key, request);
+    try {
+      text = await direct(key, request);
+    } catch (error) {
+      if (!backup) throw error;
+      text = await groq(backup, request);
+    }
+  } else if (backup) {
+    text = await groq(backup, request);
   } else if (functions && auth?.currentUser) {
     const call = httpsCallable(functions, 'ai', { timeout: 120000 });
     const res = await call({

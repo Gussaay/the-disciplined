@@ -69,8 +69,8 @@ export function AiSetupNote() {
       <Sparkles size={18} className="mt-0.5 shrink-0 text-gold-600 dark:text-gold-300" />
       <p>
         {L(
-          'Photo recognition and AI suggestions need a free Gemini key. Everything else works without it.',
-          'التعرف على الصور واقتراحات الذكاء الاصطناعي تحتاج إلى مفتاح Gemini مجاني. كل ما عداها يعمل بدونه.',
+          'Photo recognition and AI suggestions need a free Gemini or Groq key. Everything else works without it.',
+          'التعرف على الصور واقتراحات الذكاء الاصطناعي تحتاج إلى مفتاح Gemini أو Groq مجاني. كل ما عداها يعمل بدونه.',
         )}{' '}
         <Link to="/settings#ai" className="font-bold underline">
           {L('Set it up', 'إعداده')}

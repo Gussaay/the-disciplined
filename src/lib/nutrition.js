@@ -55,10 +55,20 @@ export function portion(food, grams) {
   };
 }
 
+/**
+ * Sums of the main numbers. Entries from the food database list in `unknown`
+ * the numbers their source does not report (stored as 0); those keys come back
+ * in `unknown` here too, so a total that is only a floor can say so.
+ */
 export function totals(entries) {
   const sum = { kcal: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, fiber: 0 };
-  for (const e of entries || []) for (const k of NUTRIENTS) sum[k] += n(e[k]);
+  const unknown = new Set();
+  for (const e of entries || []) {
+    for (const k of NUTRIENTS) sum[k] += n(e[k]);
+    if (n(e.grams) > 0) for (const k of e.unknown || []) unknown.add(k);
+  }
   for (const k of NUTRIENTS) sum[k] = k === 'kcal' ? Math.round(sum[k]) : r1(sum[k]);
+  if (unknown.size) sum.unknown = [...unknown];
   return sum;
 }
 

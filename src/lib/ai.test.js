@@ -46,3 +46,15 @@ test('meal ideas without items are dropped; corrections are bounded', () => {
   assert.equal(readCorrection({ corrected: 'I went.', score: 14, mistakes: [{ wrong: 'goed', right: 'went' }, {}] }).score, 10);
   assert.equal(readCorrection({ mistakes: [{ wrong: 'goed', right: 'went' }, {}] }).mistakes.length, 1);
 });
+
+test('a Groq request uses the vision model for photos and asks for JSON when needed', async () => {
+  const { groqBody } = await import('./groq.js');
+  const photo = groqBody({ system: 'Count food', prompt: 'What is this?', image: { mimeType: 'image/jpeg', base64: 'AAA' }, json: true });
+  assert.match(photo.model, /llama-4-scout/);
+  assert.equal(photo.response_format.type, 'json_object');
+  assert.match(photo.messages[0].content, /JSON/);
+  assert.equal(photo.messages[1].content[1].image_url.url, 'data:image/jpeg;base64,AAA');
+  const chat = groqBody({ system: 'Tutor', messages: [{ role: 'user', text: 'hi' }, { role: 'assistant', text: 'hello' }] });
+  assert.deepEqual(chat.messages.map((m) => m.role), ['system', 'user', 'assistant']);
+  assert.equal(chat.response_format, undefined);
+});
