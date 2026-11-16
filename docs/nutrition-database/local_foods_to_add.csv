@@ -1,0 +1,13 @@
+food_key,name_en,name_ar,status,needed_evidence,do_not_substitute_silently
+local:fino,Egyptian fino roll,عيش فينو,not_seeded,Exact label per 100 g or validated local composition source and measured roll weight,US white bread or French bread
+local:baladi,Egyptian baladi bread,عيش بلدي,not_seeded,Validated local flour and bread composition plus measured loaf weight,US whole-wheat pita
+local:rayeb,Rayeb fermented milk,لبن رايب,not_seeded,Exact manufacturer label and fat percentage or validated local composition,US yogurt or cultured buttermilk
+local:halva,Egyptian sesame halva,حلاوة طحينية مصرية,not_seeded,Exact product label and flavor or validated sesame-halva composition,Generic US plain halavah
+local:gebna-qareesh,Egyptian qareesh cheese,جبنة قريش,not_seeded,Validated local composition or exact manufacturer label and moisture/fat basis,US cottage cheese
+recipe:ful-medames,Ful medames with additions,فول مدمس بالإضافات,not_seeded,Weighed fava beans plus retained oil tahini and other ingredients and final yield,Plain boiled fava beans alone
+recipe:koshari,Egyptian koshari,كشري,not_seeded,Recipe ingredient grams including fried onion oil sauce and weighed final yield,A single rice or lentil record
+recipe:taameya,Egyptian fava falafel,طعمية,not_seeded,Validated local composition or weighed recipe and retained frying oil,Chickpea falafel automatically
+recipe:kisra,Sudanese kisra,كسرة,not_seeded,Validated composition or sorghum recipe fermentation and weighed cooked yield,US bread or raw sorghum flour
+recipe:asida,Sudanese asida,عصيدة,not_seeded,Exact flour recipe with water and weighed cooked yield,Raw cereal flour
+recipe:mulah,Sudanese mulah stew,ملاح,not_seeded,Specific recipe variant ingredients retained oil and weighed final yield,A generic stew without matching recipe
+recipe:molokhia,Molokhia soup,ملوخية,not_seeded,Specific recipe with broth oil garlic and weighed final yield,Raw leaves alone

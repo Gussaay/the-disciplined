@@ -18,6 +18,18 @@
     },
     "LocalNotifications": {
       "iconColor": "#0F3D3E"
+    },
+    "SocialLogin": {
+      "google": true,
+      "facebook": false,
+      "apple": false,
+      "twitter": false
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "autoDeleteFailed": true,
+      "autoDeletePrevious": true,
+      "resetWhenUpdate": true
     }
   },
   "android": {

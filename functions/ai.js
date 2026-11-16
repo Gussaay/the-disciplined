@@ -137,7 +137,9 @@ async function askGroq(key, request) {
 
 const secret = (param) => {
   try {
-    return param.value() || '';
+    const v = param.value() || '';
+    // CI stores "none" for a key that was not given (a secret cannot be empty).
+    return v === 'none' ? '' : v;
   } catch {
     return '';
   }

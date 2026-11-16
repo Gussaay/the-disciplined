@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Flame, Settings as SettingsIcon } from 'lucide-react';
+import { BarChart3, ChevronRight, Flame, Settings as SettingsIcon } from 'lucide-react';
+import UpdateBanner from '../components/UpdateBanner';
+import { useAuth } from '../hooks/useAuth';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { GOALS } from '../config';
@@ -62,6 +64,8 @@ export default function Home() {
   const [contacts] = useStore('contacts', EMPTY);
   const [english] = useStore('english', NONE);
   const [draft, setDraft] = useState(null);
+  const { user } = useAuth();
+  const name = profile.name || user?.displayName || '';
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -121,12 +125,17 @@ export default function Home() {
               <p className="text-sm text-white/70">{date(now)}</p>
               <p className="text-sm text-gold-300">{hijri(now)}</p>
               <h1 className="mt-2 text-2xl font-extrabold">
-                {profile.name ? L(`Peace be upon you, ${profile.name}`, `السلام عليكم، ${profile.name}`) : L('Peace be upon you', 'السلام عليكم')}
+                {name ? L(`Peace be upon you, ${name}`, `السلام عليكم، ${name}`) : L('Peace be upon you', 'السلام عليكم')}
               </h1>
             </div>
-            <Link to="/settings" aria-label={L('Settings', 'الإعدادات')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
-              <SettingsIcon size={20} />
-            </Link>
+            <div className="flex shrink-0 gap-2">
+              <Link to="/dashboard" aria-label={L('Dashboard', 'لوحة المتابعة')} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
+                <BarChart3 size={20} />
+              </Link>
+              <Link to="/settings" aria-label={L('Settings', 'الإعدادات')} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
+                <SettingsIcon size={20} />
+              </Link>
+            </div>
           </div>
 
           <div className="mt-5 flex items-center gap-5">
@@ -173,6 +182,7 @@ export default function Home() {
       </div>
 
       <div className="space-y-3 px-4 pt-4">
+        <UpdateBanner />
         {goals.map((g) => (
           <Link key={g.id} to={g.path} className="card flex animate-rise items-center gap-3 active:scale-[0.99]">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl" style={{ background: `${g.color}1F` }} aria-hidden>
@@ -191,6 +201,16 @@ export default function Home() {
             <ChevronRight size={18} className="muted flip-rtl shrink-0" />
           </Link>
         ))}
+        <Link to="/dashboard" className="card flex items-center gap-3 active:scale-[0.99]">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 dark:bg-white/10 dark:text-white" aria-hidden>
+            <BarChart3 />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">{L('Dashboard', 'لوحة المتابعة')}</p>
+            <p className="muted truncate text-sm">{L('Every goal over the week, month or three months', 'كل الأهداف خلال أسبوع أو شهر أو ثلاثة أشهر')}</p>
+          </div>
+          <ChevronRight size={18} className="muted flip-rtl shrink-0" />
+        </Link>
       </div>
 
       <Sheet

@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Download, ExternalLink, KeyRound, LogOut, Upload } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Download, ExternalLink, KeyRound, LogIn, LogOut, RefreshCw, Upload } from 'lucide-react';
+import UpdateBanner, { useUpdates } from '../components/UpdateBanner';
+import { checkForUpdates } from '../lib/liveUpdate';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { useTheme } from '../hooks/useTheme';
-import { canGoogle, logout, resetPassword, signIn, signInGoogle, signUp, useAuth } from '../hooks/useAuth';
-import { APP_VERSION, BUILD_VERSION, GOALS } from '../config';
+import { authMessage, logout, resendVerification, useAuth } from '../hooks/useAuth';
+import { APK_LATEST_URL, APP_VERSION, BUILD_VERSION, GOALS } from '../config';
 import { Field, NumberInput, Page, Section, Segmented, useToast } from '../components/ui';
 import ProfileForm from '../components/ProfileForm';
 import { dailyTargets } from '../lib/nutrition';
 import { exportAll, importAll } from '../lib/store';
-import { downloadText, openUrl } from '../lib/native';
+import { downloadText, isNative, openUrl } from '../lib/native';
 import { askAI } from '../lib/ai';
 import { clearReminders, remindersSupported } from '../lib/notify';
 import { dayKey } from '../lib/dates';
@@ -33,51 +35,55 @@ function Toggle({ label, hint, checked, onChange }) {
 function Account() {
   const { L } = useLang();
   const toast = useToast();
+  const navigate = useNavigate();
   const { user, cloudEnabled } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
   if (!cloudEnabled) {
     return (
       <p className="text-sm">
         {L(
-          'Your data is kept on this device only. Use the backup file below to move it to another phone. Cloud backup across devices turns on once a Firebase project is connected (see the README).',
-          'بياناتك محفوظة على هذا الجهاز فقط. استخدم ملف النسخة الاحتياطية بالأسفل لنقلها إلى هاتف آخر. تُفعَّل المزامنة السحابية بين الأجهزة عند ربط مشروع Firebase (راجع ملف README).',
+          'Your data is kept on this device only. Use the backup file below to move it to another phone.',
+          'بياناتك محفوظة على هذا الجهاز فقط. استخدم ملف النسخة الاحتياطية بالأسفل لنقلها إلى هاتف آخر.',
         )}
       </p>
     );
   }
 
-  const run = async (fn, ok) => {
-    setBusy(true);
-    try {
-      await fn();
-      if (ok) toast(ok);
-    } catch (error) {
-      const code = error?.code || '';
-      toast(
-        /invalid-credential|wrong-password|user-not-found/.test(code) ? L('Wrong email or password', 'البريد أو كلمة المرور غير صحيحة')
-          : /email-already-in-use/.test(code) ? L('This email already has an account. Sign in instead.', 'لهذا البريد حساب بالفعل. سجّل الدخول.')
-            : /weak-password/.test(code) ? L('Use at least 6 characters', 'استخدم 6 أحرف على الأقل')
-              : /invalid-email|missing-email/.test(code) ? L('Check the email address', 'تحقق من عنوان البريد')
-                : /popup-closed/.test(code) ? L('Sign-in was cancelled', 'أُلغي تسجيل الدخول')
-                  : error?.message || L('Could not sign in', 'تعذر تسجيل الدخول'),
-        'error',
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (user) {
+    const password = user.providerData?.some((p) => p.providerId === 'password');
     return (
       <div className="space-y-3">
-        <p className="text-sm">
-          {L('Signed in as ', 'مسجّل الدخول باسم ')}<b dir="ltr">{user.email}</b>.{' '}
-          {L('Everything you record is backed up and follows you to your other devices.', 'كل ما تسجله يُحفظ احتياطياً وينتقل معك إلى أجهزتك الأخرى.')}
-        </p>
-        <button className="btn-soft w-full" onClick={() => run(logout)}>
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-700 text-lg font-extrabold text-white">
+            {(user.displayName || user.email || '?').trim().charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            {user.displayName && <p className="truncate font-bold">{user.displayName}</p>}
+            <p className="muted truncate text-sm" dir="ltr" style={{ textAlign: 'start' }}>{user.email}</p>
+          </div>
+        </div>
+        <p className="text-sm">{L('Everything you record is backed up and follows you to your other devices.', 'كل ما تسجله يُحفظ احتياطياً وينتقل معك إلى أجهزتك الأخرى.')}</p>
+        {password && !user.emailVerified && (
+          <button
+            className="btn-ghost w-full text-sm"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await resendVerification();
+                toast(L('Verification email sent', 'أُرسلت رسالة التحقق'));
+              } catch (e) {
+                toast(authMessage(e, L), 'error');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {L('Email not verified yet. Send the link again', 'البريد غير مؤكد بعد. أرسل الرابط مجدداً')}
+          </button>
+        )}
+        <button className="btn-soft w-full" onClick={() => logout().catch(() => {})}>
           <LogOut size={18} /> {L('Sign out', 'تسجيل الخروج')}
         </button>
       </div>
@@ -86,23 +92,52 @@ function Account() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm">{L('Sign in to back up your data and use it on several devices.', 'سجّل الدخول لحفظ بياناتك احتياطياً واستخدامها على عدة أجهزة.')}</p>
-      <Field label={L('Email', 'البريد الإلكتروني')}>
-        <input className="input" dir="ltr" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      </Field>
-      <Field label={L('Password', 'كلمة المرور')}>
-        <input className="input" dir="ltr" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      </Field>
-      <div className="grid grid-cols-2 gap-2">
-        <button className="btn-primary" disabled={busy || !email || !password} onClick={() => run(() => signIn(email, password))}>{L('Sign in', 'تسجيل الدخول')}</button>
-        <button className="btn-soft" disabled={busy || !email || !password} onClick={() => run(() => signUp(email, password))}>{L('Create account', 'إنشاء حساب')}</button>
-      </div>
-      {canGoogle && (
-        <button className="btn-soft w-full" disabled={busy} onClick={() => run(signInGoogle)}>{L('Continue with Google', 'المتابعة بحساب Google')}</button>
-      )}
-      <button className="btn-ghost w-full text-sm" disabled={busy || !email} onClick={() => run(() => resetPassword(email), L('Reset link sent to your email', 'أُرسل رابط إعادة التعيين إلى بريدك'))}>
-        {L('Forgot the password?', 'نسيت كلمة المرور؟')}
+      <p className="text-sm">{L('Sign in or create an account to back up your data and use it on several devices.', 'سجّل الدخول أو أنشئ حساباً لحفظ بياناتك احتياطياً واستخدامها على عدة أجهزة.')}</p>
+      <button className="btn-primary w-full" onClick={() => navigate('/signin')}>
+        <LogIn size={18} /> {L('Sign in or create an account', 'سجّل الدخول أو أنشئ حساباً')}
       </button>
+    </div>
+  );
+}
+
+function AppUpdates() {
+  const { L } = useLang();
+  const u = useUpdates();
+  if (!isNative) {
+    return (
+      <div className="card text-sm">
+        {L(
+          'The website updates itself: a new version is fetched in the background and used the next time you open it. For the phone app, install the APK; it then updates itself too.',
+          'الموقع يحدّث نفسه: يُجلب الإصدار الجديد في الخلفية ويُستخدم عند فتحه مرة أخرى. لتطبيق الهاتف ثبّت ملف APK، وبعدها يحدّث نفسه أيضاً.',
+        )}
+        <button className="btn-soft mt-3 w-full" onClick={() => openUrl(APK_LATEST_URL)}>
+          <Download size={18} /> {L('Download the Android app', 'نزّل تطبيق أندرويد')}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="card space-y-3">
+      <UpdateBanner />
+      <p className="text-sm">
+        {L(
+          'Most updates arrive over the air: the app downloads them in the background and uses them the next time it opens. When the phone part of the app changes, you are asked to install a new APK.',
+          'تصل معظم التحديثات عبر الإنترنت: ينزّلها التطبيق في الخلفية ويستخدمها عند فتحه مرة أخرى. وعندما يتغير الجزء الخاص بالهاتف يُطلب منك تثبيت ملف APK جديد.',
+        )}
+      </p>
+      <p className="muted tabular text-xs" dir="ltr" style={{ textAlign: 'start' }}>
+        app {u.native?.version || '…'} (build {u.native?.build || '…'}) · web {u.bundle || '…'}
+      </p>
+      <button className="btn-primary w-full" disabled={u.checking} onClick={checkForUpdates}>
+        <RefreshCw size={18} className={u.checking ? 'animate-spin' : ''} />
+        {u.checking ? L('Checking…', 'جارٍ التحقق…') : u.downloading ? L('Downloading…', 'جارٍ التنزيل…') : L('Check for updates', 'تحقق من التحديثات')}
+      </button>
+      {!u.checking && u.upToDate && <p className="text-center text-sm">{L('You have the latest version.', 'لديك أحدث إصدار.')}</p>}
+      {!u.checking && u.error && (
+        <p className="muted text-center text-sm">
+          {u.error === 'offline' ? L('No connection. Try again when online.', 'لا يوجد اتصال. حاول مجدداً عند الاتصال.') : L('Could not check right now. Try again later.', 'تعذّر التحقق الآن. حاول لاحقاً.')}
+        </p>
+      )}
     </div>
   );
 }
@@ -217,8 +252,8 @@ export default function Settings() {
           <div className="card space-y-3">
             <p className="text-sm">
               {L(
-                'AI recognises gym machines and food from photos, suggests meals, writes a training programme and tutors your English. It needs a Gemini key, which Google gives for free. The key is kept on this device only.',
-                'يتعرف الذكاء الاصطناعي على أجهزة النادي والطعام من الصور، ويقترح الوجبات، ويكتب برنامج التمرين، ويعلّمك الإنجليزية. يحتاج إلى مفتاح Gemini تقدمه Google مجاناً، ويُحفظ على هذا الجهاز فقط.',
+                'AI recognises gym machines and food from photos, suggests meals, writes a training programme and tutors your English. It needs a Gemini key (free from Google) or a Groq key (free from Groq), or both: Groq then takes over when Gemini is busy or out of its daily allowance. Keys are kept on this device only.',
+                'يتعرف الذكاء الاصطناعي على أجهزة النادي والطعام من الصور، ويقترح الوجبات، ويكتب برنامج التمرين، ويعلّمك الإنجليزية. يحتاج إلى مفتاح Gemini (مجاني من Google) أو مفتاح Groq (مجاني من Groq) أو كليهما، فيتولى Groq الطلبات حين يكون Gemini مشغولاً أو نفدت حصته اليومية. تُحفظ المفاتيح على هذا الجهاز فقط.',
               )}
             </p>
             <button className="btn-soft w-full" onClick={() => openUrl('https://aistudio.google.com/apikey')}>
@@ -229,6 +264,16 @@ export default function Settings() {
                 className="input" dir="ltr" type="password" autoComplete="off" placeholder="AIza…"
                 value={device.geminiKey || ''}
                 onChange={(e) => setDevice({ ...device, geminiKey: e.target.value.trim() })}
+              />
+            </Field>
+            <button className="btn-soft w-full" onClick={() => openUrl('https://console.groq.com/keys')}>
+              <KeyRound size={18} /> {L('Get a free key from Groq', 'احصل على مفتاح مجاني من Groq')} <ExternalLink size={14} />
+            </button>
+            <Field label={L('Groq API key (backup)', 'مفتاح Groq API (احتياطي)')}>
+              <input
+                className="input" dir="ltr" type="password" autoComplete="off" placeholder="gsk_…"
+                value={device.groqKey || ''}
+                onChange={(e) => setDevice({ ...device, groqKey: e.target.value.trim() })}
               />
             </Field>
             <button className="btn-primary w-full" onClick={testAi} disabled={testing}>
@@ -279,6 +324,10 @@ export default function Settings() {
             />
           </div>
         </div>
+      </Section>
+
+      <Section title={L('App updates', 'تحديثات التطبيق')}>
+        <AppUpdates />
       </Section>
 
       <p className="muted pb-4 text-center text-xs">
