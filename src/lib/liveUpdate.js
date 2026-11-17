@@ -22,7 +22,10 @@ import { bundleFits, newerApk } from './updateRules';
 
 export const NATIVE_HASH = import.meta.env.VITE_NATIVE_HASH || '';
 const TIMEOUT = 15_000;
-const RECHECK_MS = 6 * 60 * 60_000;
+const RECHECK_MS = 2 * 60_000;      // on return to the app, at most every 2 minutes
+const POLL_MS = 30 * 60_000;         // while the app stays open
+const APPLY_AFTER_MS = 30_000;       // a waiting update is applied on return after this long away
+const UPDATE_NOTE_ID = 4001;         // notification id, outside the reminder ranges
 
 let state = {
   native: null,      // { version, build } of the installed APK
@@ -32,6 +35,7 @@ let state = {
   ready: null,       // version downloaded and queued for the next start
   apk: null,         // { version, versionCode, apkUrl, notes } when a newer APK exists
   upToDate: false,
+  needsApk: false,   // an over-the-air update exists but this APK is too old for it
   error: null,
   checkedAt: null,
 };
@@ -80,8 +84,16 @@ export async function checkForUpdates() {
       getJson('/latest/update.json').catch(() => null),
     ]);
     set({ apk: newerApk(apk, info.build) ? apk : null });
+    if (!apk && !manifest) throw new Error('The update site did not answer');
 
     const fit = bundleFits(manifest, { running, nativeHash: NATIVE_HASH });
+    set({ needsApk: fit === 'needs-apk' });
+    if (state.apk) notifyOnce(`apk-${state.apk.version}`, {
+      title: 'New version of the app',
+      titleAr: 'إصدار جديد من التطبيق',
+      body: `Version ${state.apk.version} is ready. Open the app and press Download.`,
+      bodyAr: `الإصدار ${state.apk.version} جاهز. افتح التطبيق واضغط تنزيل.`,
+    });
     if (fit === 'install' && state.ready !== manifest.version) {
       set({ downloading: true });
       const { bundles = [] } = await U.list().catch(() => ({ bundles: [] }));
@@ -89,6 +101,12 @@ export async function checkForUpdates() {
       if (!bundle) bundle = await U.download({ url: manifest.url, version: manifest.version, checksum: manifest.checksum });
       await U.next({ id: bundle.id });
       set({ ready: manifest.version, downloading: false, readyId: bundle.id, notes: manifest.notes || null });
+      notifyOnce(`ota-${manifest.version}`, {
+        title: 'Update downloaded',
+        titleAr: 'تم تنزيل تحديث',
+        body: manifest.notes ? `${manifest.notes}. It is used next time you open the app.` : 'It is used next time you open the app.',
+        bodyAr: 'سيُستخدم عند فتح التطبيق في المرة القادمة.',
+      });
     }
     set({ upToDate: fit === 'current' && !state.apk, checkedAt: Date.now() });
   } catch (e) {
@@ -107,6 +125,25 @@ export async function restartIntoUpdate() {
   await U.set({ id: state.readyId });
 }
 
+/** A phone notification about an update, shown once per version. */
+async function notifyOnce(key, { title, titleAr, body, bodyAr }) {
+  try {
+    const seen = localStorage.getItem('td:updateNotified');
+    if (seen === key) return;
+    localStorage.setItem('td:updateNotified', key);
+    const ar = (document.documentElement.lang || '').startsWith('ar');
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    const permission = await LocalNotifications.checkPermissions();
+    if (permission.display !== 'granted') return;
+    await LocalNotifications.schedule({
+      notifications: [{ id: UPDATE_NOTE_ID, title: ar ? titleAr : title, body: ar ? bodyAr : body, schedule: { at: new Date(Date.now() + 1500) } }],
+    });
+  } catch { /* notifications are a bonus */ }
+}
+
+/** Pages where switching code would interrupt the person. */
+const busyNow = () => typeof location !== 'undefined' && /\/gym\/session/.test(location.pathname + location.hash);
+
 let started = false;
 /** Called once at start in the Android app. */
 export function startUpdates() {
@@ -116,11 +153,29 @@ export function startUpdates() {
   // and goes back to the previous one.
   getUpdater().then((U) => U.notifyAppReady()).catch(() => {});
   setTimeout(checkForUpdates, 3000);
-  let last = Date.now();
+  // Android keeps the app in memory for days, so "next start" can be far
+  // away: check whenever the person comes back, and apply a downloaded
+  // update then if they were away a while.
+  let lastCheck = Date.now();
+  let leftAt = 0;
   CapApp.addListener('appStateChange', ({ isActive }) => {
-    if (isActive && Date.now() - last > RECHECK_MS) {
-      last = Date.now();
+    if (!isActive) {
+      leftAt = Date.now();
+      return;
+    }
+    if (state.readyId && leftAt && Date.now() - leftAt > APPLY_AFTER_MS && !busyNow()) {
+      restartIntoUpdate().catch(() => {});
+      return;
+    }
+    if (Date.now() - lastCheck > RECHECK_MS) {
+      lastCheck = Date.now();
       checkForUpdates();
     }
   });
+  setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      lastCheck = Date.now();
+      checkForUpdates();
+    }
+  }, POLL_MS);
 }
