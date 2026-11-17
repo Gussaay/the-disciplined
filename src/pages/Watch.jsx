@@ -39,7 +39,7 @@ async function link(watch, profile) {
       profile,
       onEvent: (e) => {
         if (e.type === 'log') {
-          live.log = [...live.log.slice(-80), `${new Date().toISOString().slice(11, 19)} ${e.dir === 'out' ? '→' : '←'} ${e.hex}`];
+          live.log = [...live.log.slice(-80), `${new Date().toISOString().slice(11, 19)} ${e.dir === 'out' ? '→' : e.dir === 'info' ? '·' : '←'} ${e.hex}`];
           return;
         }
         if (e.type === 'battery') set({ battery: e.level });

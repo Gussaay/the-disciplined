@@ -40,10 +40,20 @@ export async function pickWatch() {
  */
 export async function connectWatch({ id }, { profile = {}, onEvent = () => {}, onEnd = () => {} } = {}) {
   const BleClient = await ble();
-  await BleClient.connect(id, () => onEnd());
-  const services = await BleClient.getServices(id);
-  const has = (uuid) => services.find((s) => s.uuid.toLowerCase() === uuid);
   const log = (dir, bytes) => onEvent({ type: 'log', dir, hex: hex(bytes) });
+  const note = (text) => onEvent({ type: 'log', dir: 'info', hex: text });
+  await BleClient.connect(id, () => onEnd());
+  // Some phones hand back an empty service list right after connecting,
+  // especially while the watch's own app shares the connection. Ask again.
+  let services = await BleClient.getServices(id).catch(() => []);
+  for (let tries = 0; !services.length && tries < 3; tries += 1) {
+    note(`no services yet, discovering (${tries + 1})`);
+    await sleep(700);
+    await BleClient.discoverServices(id).catch(() => {});
+    services = await BleClient.getServices(id).catch(() => []);
+  }
+  note(`services: ${services.map((x) => x.uuid).join(', ') || 'none listed'}`);
+  const has = (uuid) => services.find((s) => s.uuid.toLowerCase() === uuid);
 
   const battery = has(BATTERY_SERVICE);
   const readBattery = async () => {
@@ -54,30 +64,51 @@ export async function connectWatch({ id }, { profile = {}, onEvent = () => {}, o
     } catch { /* not readable */ }
   };
 
-  const fit = FITPRO_SERVICES.map(has).find(Boolean);
-  if (fit) {
-    const service = fit.uuid.toLowerCase();
-    const { tx, rx } = fitproChars(service);
-    const canWriteWithResponse = fit.characteristics?.find((c) => c.uuid.toLowerCase() === tx)?.properties?.write;
-    const send = async (bytes) => {
+  // The FitPro service: the listed one, or, when the phone listed nothing,
+  // each known id tried directly.
+  const assembler = createAssembler();
+  let send = null;
+  const onData = (dv) => {
+    const chunk = bytesOf(dv);
+    log('in', chunk);
+    for (const packet of assembler.push(chunk)) {
+      if (needsAck(packet) && send) send(ack(packet)).catch(() => {});
+      const event = parsePacket(packet);
+      if (event && event.type !== 'other') onEvent(event);
+    }
+  };
+  const listed = FITPRO_SERVICES.map(has).find(Boolean);
+  const candidates = listed ? [listed.uuid.toLowerCase()] : services.length && !services.some((x) => x.uuid.toLowerCase().startsWith('6e40')) ? [] : FITPRO_SERVICES;
+  let service = null;
+  for (const uuid of candidates) {
+    try {
+      await BleClient.startNotifications(id, uuid, fitproChars(uuid).rx, onData);
+      service = uuid;
+      break;
+    } catch (e) {
+      note(`${uuid}: ${e?.message || e}`);
+    }
+  }
+  if (service) {
+    const { tx } = fitproChars(service);
+    let withResponse = listed?.characteristics?.find((c) => c.uuid.toLowerCase() === tx)?.properties?.write ?? false;
+    send = async (bytes) => {
       log('out', bytes);
       // Long packets go in 20-byte pieces, as many of these watches need.
       for (let i = 0; i < bytes.length; i += 20) {
         const part = view(bytes.slice(i, i + 20));
-        if (canWriteWithResponse) await BleClient.write(id, service, tx, part);
-        else await BleClient.writeWithoutResponse(id, service, tx, part);
+        try {
+          if (withResponse) await BleClient.write(id, service, tx, part);
+          else await BleClient.writeWithoutResponse(id, service, tx, part);
+        } catch (e) {
+          // The other way of writing, once, if the watch refused this one.
+          withResponse = !withResponse;
+          note(`write switched (${e?.message || e})`);
+          if (withResponse) await BleClient.write(id, service, tx, part);
+          else await BleClient.writeWithoutResponse(id, service, tx, part);
+        }
       }
     };
-    const assembler = createAssembler();
-    await BleClient.startNotifications(id, service, rx, (dv) => {
-      const chunk = bytesOf(dv);
-      log('in', chunk);
-      for (const packet of assembler.push(chunk)) {
-        if (needsAck(packet)) send(ack(packet)).catch(() => {});
-        const event = parsePacket(packet);
-        if (event && event.type !== 'other') onEvent(event);
-      }
-    });
     for (const packet of initSequence(profile)) {
       await send(packet);
       await sleep(220);
@@ -115,7 +146,7 @@ export async function connectWatch({ id }, { profile = {}, onEvent = () => {}, o
     };
   }
 
-  const list = services.map((s) => s.uuid).join(', ');
+  const list = services.map((x) => x.uuid).join(', ') || 'none listed by the phone';
   await BleClient.disconnect(id).catch(() => {});
   throw Object.assign(new Error(`This watch speaks a protocol the app does not know yet. Services: ${list}`), { code: 'watch-unknown', services: list });
 }
