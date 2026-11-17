@@ -31,7 +31,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp}'],
         runtimeCaching: [
           {
             // The food database: fetched the first time it is opened, then

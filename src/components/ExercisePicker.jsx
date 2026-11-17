@@ -1,7 +1,7 @@
 // Choosing what to train: by tapping a machine, by searching, or by taking a
 // photo of the machine and letting the AI recognise it.
 import { useMemo, useState } from 'react';
-import { ChevronLeft, Plus, Search, Sparkles } from 'lucide-react';
+import { Camera, ChevronLeft, Plus, Search, Sparkles, X } from 'lucide-react';
 import { useLang } from '../i18n';
 import { EQUIPMENT, EXERCISES, MUSCLES, equipmentById } from '../data/equipment';
 import { askAI, aiAvailable } from '../lib/ai';
@@ -9,6 +9,19 @@ import { equipmentPrompt, readEquipment } from '../lib/aiPrompts';
 import { customExercise } from '../lib/gymSession';
 import { AiSetupNote, PhotoButton, useAiError } from './Ai';
 import { Sheet, useToast } from './ui';
+import ExerciseGuide from './ExerciseGuide';
+import { PHOTOS, REGIONS, targetsOf } from '../data/exerciseGuide';
+import { useStore } from '../hooks/useStore';
+import { shrinkImage } from '../lib/image';
+
+const NONE = {};
+
+/** The photo of a machine: the one taken at the gym, or the built-in one. */
+export function useMachinePhotos() {
+  const [own, setOwn] = useStore('gymPhotos', NONE);
+  const photoOf = (id) => own[id] || PHOTOS[id]?.photo || PHOTOS[id]?.label || null;
+  return { own, setOwn, photoOf };
+}
 
 export function ExerciseRow({ exercise, onAdd, addLabel }) {
   const { pick, L } = useLang();
@@ -18,8 +31,13 @@ export function ExerciseRow({ exercise, onAdd, addLabel }) {
     <div className="card !p-3">
       <div className="flex items-center gap-2">
         <button className="min-w-0 flex-1 text-start" onClick={() => setOpen(!open)} aria-expanded={open}>
-          <p className="font-bold">{pick(exercise.name)}</p>
-          <p className="muted text-sm">{muscle}</p>
+          <p className="font-bold">{exercise.custom ? exercise.name : pick(exercise.name)}</p>
+          <p className="muted text-sm">
+            {(() => {
+              const t = targetsOf(exercise.id, exercise.muscle);
+              return t.primary.length ? t.primary.map((r) => pick(REGIONS[r])).join(L(', ', '، ')) : muscle;
+            })()}
+          </p>
         </button>
         {onAdd && (
           <button className="btn-soft !min-h-[40px] !px-3" onClick={() => onAdd(exercise)}>
@@ -28,7 +46,12 @@ export function ExerciseRow({ exercise, onAdd, addLabel }) {
           </button>
         )}
       </div>
-      {open && <p className="mt-2 border-t border-brand-900/10 pt-2 text-sm leading-relaxed dark:border-white/10">{pick(exercise.how)}</p>}
+      {!open && <p className="muted mt-1 text-xs">{L('Tap the name to see the muscles and how to do it', 'اضغط الاسم لترى العضلات وطريقة الأداء')}</p>}
+      {open && (
+        <div className="mt-2 border-t border-brand-900/10 pt-2 dark:border-white/10">
+          <ExerciseGuide exercise={exercise} />
+        </div>
+      )}
     </div>
   );
 }
@@ -77,6 +100,13 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
   };
 
   const equipment = equipmentId && equipmentById(equipmentId);
+  const { own, setOwn, photoOf } = useMachinePhotos();
+  const [zoom, setZoom] = useState(null);
+  const ownPhoto = async (file) => {
+    const { dataUrl } = await shrinkImage(file, 640, 0.7);
+    setOwn({ ...own, [equipmentId]: dataUrl });
+    toast(L('Photo saved for this machine', 'حُفظت صورة هذا الجهاز'));
+  };
 
   const body = (
     <div className="space-y-3">
@@ -137,7 +167,33 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
             <ChevronLeft size={16} className="flip-rtl" />
             {L('All equipment', 'كل الأجهزة')}
           </button>
+          {photoOf(equipment.id) && (
+            <button className="block w-full overflow-hidden rounded-2xl bg-black/5" onClick={() => setZoom(photoOf(equipment.id))}>
+              <img src={photoOf(equipment.id)} alt={pick(equipment.name)} className="max-h-72 w-full object-cover" />
+            </button>
+          )}
           <h3 className="text-lg font-extrabold"><span aria-hidden>{equipment.icon}</span> {pick(equipment.name)}</h3>
+          {PHOTOS[equipment.id]?.label && PHOTOS[equipment.id].label !== photoOf(equipment.id) && (
+            <button className="flex w-full items-center gap-3 rounded-2xl bg-brand-50/70 p-2 text-start text-sm dark:bg-white/5" onClick={() => setZoom(PHOTOS[equipment.id].label)}>
+              <img src={PHOTOS[equipment.id].label} alt="" className="h-14 w-20 rounded-lg object-cover" />
+              <span>{L('The instruction label on this machine. Tap to enlarge.', 'ملصق التعليمات على هذا الجهاز. اضغط للتكبير.')}</span>
+            </button>
+          )}
+          <label className="btn-ghost w-full cursor-pointer text-sm">
+            <Camera size={16} />
+            {own[equipment.id] ? L('Change my photo of this machine', 'غيّر صورتي لهذا الجهاز') : L('Add a photo of this machine at my gym', 'أضف صورة هذا الجهاز في ناديّ')}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) ownPhoto(file).catch(() => toast(L('Could not read the picture', 'تعذرت قراءة الصورة'), 'error'));
+              }}
+            />
+          </label>
           {equipment.exercises.map((x) => (
             <ExerciseRow key={x.id} exercise={EXERCISES[x.id]} onAdd={onAdd} addLabel={addLabel} />
           ))}
@@ -145,11 +201,15 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
       ) : (
         !found?.exercises?.length && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {EQUIPMENT.map((e) => (
-              <button key={e.id} className="card flex flex-col items-start gap-1 !p-3 text-start active:scale-[0.98]" onClick={() => setEquipmentId(e.id)}>
-                <span className="text-2xl" aria-hidden>{e.icon}</span>
-                <span className="font-bold leading-tight">{pick(e.name)}</span>
-                <span className="muted text-xs">{L(`${e.exercises.length} exercises`, `${e.exercises.length} تمارين`)}</span>
+            {[...EQUIPMENT].sort((a, b) => Boolean(photoOf(b.id)) - Boolean(photoOf(a.id))).map((e) => (
+              <button key={e.id} className="card flex flex-col items-start gap-1 overflow-hidden !p-0 text-start active:scale-[0.98]" onClick={() => setEquipmentId(e.id)}>
+                {photoOf(e.id) ? (
+                  <img src={photoOf(e.id)} alt="" loading="lazy" className="h-28 w-full object-cover" />
+                ) : (
+                  <span className="flex h-28 w-full items-center justify-center bg-brand-50/70 text-5xl dark:bg-white/5" aria-hidden>{e.icon}</span>
+                )}
+                <span className="px-3 pt-1 font-bold leading-tight">{pick(e.name)}</span>
+                <span className="muted px-3 pb-3 text-xs">{L(`${e.exercises.length} exercises`, `${e.exercises.length} تمارين`)}</span>
               </button>
             ))}
           </div>
@@ -158,10 +218,24 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
     </div>
   );
 
-  if (onClose === undefined) return body;
+  const withZoom = (
+    <>
+      {body}
+      {zoom && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 p-4" onClick={() => setZoom(null)} role="dialog" aria-modal="true">
+          <img src={zoom} alt="" className="max-h-full max-w-full rounded-xl object-contain" />
+          <button className="absolute end-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white" aria-label={L('Close', 'إغلاق')}>
+            <X size={22} />
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  if (onClose === undefined) return withZoom;
   return (
     <Sheet open={open} onClose={onClose} title={L('Choose an exercise', 'اختر تمريناً')}>
-      {body}
+      {withZoom}
     </Sheet>
   );
 }

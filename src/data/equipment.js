@@ -124,11 +124,31 @@ export const EQUIPMENT = [
   {
     id: 'seated_row', icon: '↔️', name: { en: 'Seated row', ar: 'جهاز التجديف جالساً' },
     exercises: [
-      ['seated_row', 'Seated cable row', 'تجديف جالساً', 'back', 'Sit tall. Pull the handle to the stomach, squeeze the shoulder blades, return with straight arms.', 'اجلس منتصباً. اسحب المقبض إلى البطن وضمّ لوحي الكتف ثم ارجع بذراعين ممدودتين.'],
+      ['seated_row', 'Seated row', 'تجديف جالساً', 'back', 'Sit tall with the chest on the pad. Pull the handles to the stomach, squeeze the shoulder blades, return with straight arms.', 'اجلس منتصباً والصدر على المسند. اسحب المقابض إلى البطن وضمّ لوحي الكتف ثم ارجع بذراعين ممدودتين.'],
     ],
   },
   {
-    id: 'cable', icon: '🔗', name: { en: 'Cable machine', ar: 'جهاز الكيبل' },
+    id: 'tbar_row', icon: '🏋️', name: { en: 'T-bar row', ar: 'جهاز التجديف T-bar' },
+    exercises: [
+      ['tbar_row', 'T-bar row', 'تجديف T-bar', 'back', 'Feet on the foot plates, knees soft. Hinge forward with a flat back. Pull the handles to the chest and squeeze the shoulder blades. Lower until the arms are straight.', 'ضع القدمين على مكان القدم والركبتان منثنيتان قليلاً. انحنِ للأمام بظهر مستقيم. اسحب المقابض إلى الصدر وضمّ لوحي الكتف. أنزل حتى تستقيم الذراعان.'],
+    ],
+  },
+  {
+    id: 'preacher_curl', icon: '💪', name: { en: 'Preacher curl', ar: 'جهاز البايسبس (بريتشر)' },
+    exercises: [
+      ['preacher_curl', 'Preacher curl', 'بايسبس بريتشر', 'biceps', 'Armpits on the top of the pad, the backs of the arms flat on it. Curl the handle up towards the shoulders and squeeze. Lower slowly until the arms are almost straight.', 'الإبطان على أعلى المسند وخلف الذراعين ملاصق له. ارفع المقبض نحو الكتفين واضغط. أنزل ببطء حتى تكاد الذراعان تستقيمان.'],
+    ],
+  },
+  {
+    id: 'assisted_chin_dip', icon: '🧗', name: { en: 'Assisted chin / dip', ar: 'جهاز العقلة والمتوازي المساعد' },
+    exercises: [
+      ['assisted_pullup', 'Assisted pull-up', 'عقلة بمساعدة', 'back', 'Kneel on the pad and hold the top handles wide. Pull until the chin passes the handles. Lower all the way with control.', 'اركع على المسند وأمسك المقابض العلوية بعرض. اسحب حتى يتجاوز الذقن المقابض. انزل كاملاً بتحكم.'],
+      ['assisted_chinup', 'Assisted chin-up', 'عقلة مساعدة بقبضة معكوسة', 'biceps', 'Kneel on the pad, palms facing you on the narrow handles. Pull the chest up to the hands. Lower all the way.', 'اركع على المسند وراحتا اليدين نحوك على المقابض الضيقة. اسحب الصدر نحو اليدين. انزل كاملاً.'],
+      ['assisted_dip', 'Assisted dip', 'متوازي بمساعدة', 'triceps', 'Kneel on the pad and hold the dip handles with straight arms. Lower until the elbows are at 90°. Press back up without locking the elbows.', 'اركع على المسند وأمسك مقابض المتوازي بذراعين ممدودتين. انزل حتى يصبح المرفقان بزاوية 90°. ادفع للأعلى دون قفل المرفقين.'],
+    ],
+  },
+  {
+    id: 'cable', icon: '🔗', name: { en: 'Cable column', ar: 'جهاز الكيبل' },
     exercises: [
       ['triceps_pushdown', 'Triceps pushdown', 'ترايسبس بالكيبل', 'triceps', 'Elbows at the sides. Push the bar down until the arms are straight, return to 90°.', 'ثبّت المرفقين بالجانبين. ادفع البار حتى تستقيم الذراعان ثم ارجع إلى 90°.'],
       ['cable_curl', 'Cable curl', 'بايسبس بالكيبل', 'biceps', 'Low pulley. Curl the bar up with still elbows.', 'من البكرة السفلية، ارفع البار مع ثبات المرفقين.'],
@@ -159,7 +179,7 @@ export const EQUIPMENT = [
   {
     id: 'leg_curl', icon: '🦵', name: { en: 'Leg curl', ar: 'جهاز ثني الأرجل' },
     exercises: [
-      ['leg_curl', 'Leg curl', 'ثني الأرجل', 'legs', 'Pad above the heels. Curl the heels towards the glutes and return with control.', 'المسند فوق الكعبين. اثنِ الكعبين نحو الأرداف وارجع بتحكم.'],
+      ['leg_curl', 'Leg curl', 'ثني الأرجل', 'legs', 'Lie face down, knees just past the bench, pad above the heels. Curl the heels towards the glutes, keeping the hips down. Return with control.', 'استلقِ على بطنك والركبتان بعد حافة المقعد والمسند فوق الكعبين. اثنِ الكعبين نحو الأرداف مع إبقاء الحوض ملاصقاً. ارجع بتحكم.'],
     ],
   },
   {

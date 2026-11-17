@@ -8,6 +8,7 @@ import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { NumberInput, useToast } from '../components/ui';
 import ExercisePicker from '../components/ExercisePicker';
+import ExerciseGuide from '../components/ExerciseGuide';
 import { EXERCISES, MUSCLES } from '../data/equipment';
 import { estimateBurn, isRecord, lastPerformance, nextTarget, personalRecords, sessionMinutes, sessionSets, sessionVolume } from '../lib/gym';
 import { addSet, finishSession, makeExercise, setComplete } from '../lib/gymSession';
@@ -237,7 +238,11 @@ export default function GymSession() {
                   <Trash2 size={18} />
                 </button>
               </div>
-              {howFor === i && <p className="mt-1 rounded-xl bg-brand-50 p-3 text-sm leading-relaxed dark:bg-white/5">{howOf(e)}</p>}
+              {howFor === i && (
+                <div className="mt-1 rounded-xl bg-brand-50/50 p-3 dark:bg-white/5">
+                  <ExerciseGuide exercise={{ ...e, how: howOf(e) }} />
+                </div>
+              )}
               {last && (
                 <p className="muted mt-1 text-sm">
                   {L('Last time: ', 'المرة السابقة: ')}
