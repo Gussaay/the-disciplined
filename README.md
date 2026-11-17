@@ -161,7 +161,11 @@ Bluetooth advertisements, so neither pairing nor the OKOK app is needed.
 Formats handled (`src/lib/scaleParse.js`, after openScale's OKOK drivers):
 `0x20CA` (weight + impedance), `0x11CA` (weight), `0x??C0` (weight +
 impedance, MAC inside) and `0xF0FF`. An unknown scale can be taught from its
-display ("Find" then "Teach the weight"), and "Copy capture" copies the raw
+display: "Find" lists likely scales first (named like a scale, showing a
+weight, or with data that keeps changing while you stand on it; "Show all
+devices" and a name/address filter find the rest), then "Teach the weight"
+walks through three steps (stand still, type the number on the display, check
+the live reading before saving). "Copy capture" copies the raw
 bytes for support. Body fat, muscle, water, visceral fat, bone, protein and
 BMR come from the impedance with open formulas (`src/lib/bodyComp.js`), so
 they can differ from OKOK's by a few points. Android only (web adds weight by
@@ -213,6 +217,18 @@ bundles after that install as usual.
 Both need the `FIREBASE_SERVICE_ACCOUNT_DISCIPLINED` secret (hosting deploy).
 
 ## Smartwatch
+
+- **My watch (`/watch`), without the watch's own app:** links FitPro watches
+  (the green FitPro app: Gizmo GZCSW02, M4, M6, LH716 and many low-cost
+  watches) directly over Bluetooth with the protocol Gadgetbridge documents
+  (`src/lib/fitpro.js`). It sets the watch clock and your profile, reads
+  today's steps, distance and calories, measures heart rate, SpO2 and blood
+  pressure on demand, finds the watch, and makes the phone vibrate when the
+  watch asks for it. Before linking, unbind the watch in FitPro and close it,
+  and forget it in the phone's Bluetooth list, because a watch talks to one app
+  at a time. Watches with only the standard heart-rate service link too (heart
+  rate only). "Copy connection log" copies the raw bytes for support. Android
+  app only. Data lives in `watch` and `watchLog` (synced).
 
 - **Live heart rate during a workout:** the Watch button in a workout connects
   over Bluetooth to anything that offers the standard heart-rate service: chest

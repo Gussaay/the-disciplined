@@ -62,6 +62,8 @@ export default function Home() {
   const [prayerLog] = useStore('prayerLog', NONE);
   const [weightLog] = useStore('weightLog', EMPTY);
   const [tasks] = useStore('tasks', EMPTY);
+  const [watch] = useStore('watch', null);
+  const [watchLog] = useStore('watchLog', NONE);
   const [prayerSettings] = useStore('prayerSettings', NONE);
   const [contacts] = useStore('contacts', EMPTY);
   const [english] = useStore('english', NONE);
@@ -212,6 +214,10 @@ export default function Home() {
           })()}
         />
         <ModuleLink id="weight" status={lastWeight ? L(`${num(lastWeight.weight, 1)} kg${lastWeight.fat != null ? ` · fat ${num(lastWeight.fat, 1)}%` : ''}`, `${num(lastWeight.weight, 1)} كجم${lastWeight.fat != null ? ` · دهون ${num(lastWeight.fat, 1)}٪` : ''}`) : L('Read your Bluetooth scale', 'اقرأ ميزانك بالبلوتوث')} />
+        <ModuleLink
+          id="watch"
+          status={watch ? (watchLog[today]?.steps != null ? L(`${num(watchLog[today].steps)} steps today${watchLog[today].bpm ? ` · ${watchLog[today].bpm} bpm` : ''}`, `${num(watchLog[today].steps)} خطوة اليوم${watchLog[today].bpm ? ` · ${watchLog[today].bpm} نبضة` : ''}`) : L(`${watch.name || 'Watch'} linked`, `${watch.name || 'الساعة'} مرتبطة`)) : L('Link your watch without its app', 'اربط ساعتك بدون تطبيقها')}
+        />
         <Link to="/dashboard" className="card flex items-center gap-3 active:scale-[0.99]">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 dark:bg-white/10 dark:text-white" aria-hidden>
             <BarChart3 />

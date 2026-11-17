@@ -36,6 +36,10 @@ export const MODULES = [
     id: 'tasks', path: '/tasks', icon: '✅', color: '#7A5BC7', dark: '#47307F', name: { en: 'Tasks', ar: 'المهام' },
     motto: { en: 'One thing at a time', ar: 'خطوة بعد خطوة' },
   },
+  {
+    id: 'watch', path: '/watch', icon: '⌚', color: '#E0702E', dark: '#8A3A12', name: { en: 'My watch', ar: 'ساعتي' },
+    motto: { en: 'Every step counts', ar: 'كل خطوة تُحسب' },
+  },
 ];
 
 export const goalById = (id) => GOALS.find((g) => g.id === id) || MODULES.find((g) => g.id === id);
