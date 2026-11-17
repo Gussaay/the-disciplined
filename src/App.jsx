@@ -27,6 +27,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const SignIn = lazy(() => import('./pages/SignIn'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Weight = lazy(() => import('./pages/Weight'));
+const Tasks = lazy(() => import('./pages/Tasks'));
 
 /** Android hardware back: history first, then leave the app from the home screen. */
 function useNativeBackButton() {
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="/signin" element={<SignIn />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/weight" element={<Weight />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
