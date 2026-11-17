@@ -278,7 +278,15 @@ function AppUpdates() {
       {!u.checking && u.upToDate && <p className="text-center text-sm">{L('You have the latest version.', 'لديك أحدث إصدار.')}</p>}
       {!u.checking && u.error && (
         <p className="muted text-center text-sm">
-          {u.error === 'offline' ? L('No connection. Try again when online.', 'لا يوجد اتصال. حاول مجدداً عند الاتصال.') : L('Could not check right now. Try again later.', 'تعذّر التحقق الآن. حاول لاحقاً.')}
+          {u.error === 'offline' ? L('No connection. Try again when online.', 'لا يوجد اتصال. حاول مجدداً عند الاتصال.') : L(`Could not check right now (${u.error}). Try again later.`, `تعذّر التحقق الآن (${u.error}). حاول لاحقاً.`)}
+        </p>
+      )}
+      {!u.checking && u.needsApk && (
+        <p className="rounded-xl bg-gold-100 p-3 text-sm dark:bg-gold-500/10">
+          {L(
+            'New features changed the phone part of the app, so updates over the air wait until you install the new APK once (Download above, then open the file). After that they arrive by themselves again.',
+            'غيّرت الميزات الجديدة الجزء الخاص بالهاتف، لذلك تنتظر التحديثات عبر الإنترنت حتى تثبّت ملف APK الجديد مرة واحدة (تنزيل بالأعلى ثم افتح الملف). بعدها تصل تلقائياً من جديد.',
+          )}
         </p>
       )}
     </div>
