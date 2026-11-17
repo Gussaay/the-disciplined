@@ -5,7 +5,7 @@ import UpdateBanner from '../components/UpdateBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
-import { GOALS } from '../config';
+import { GOALS, goalById } from '../config';
 import { Sheet } from '../components/ui';
 import ProfileForm from '../components/ProfileForm';
 import { commitment } from '../lib/score';
@@ -60,6 +60,7 @@ export default function Home() {
   const [gymSessions] = useStore('gymSessions', EMPTY);
   const [foodLog] = useStore('foodLog', NONE);
   const [prayerLog] = useStore('prayerLog', NONE);
+  const [weightLog] = useStore('weightLog', EMPTY);
   const [prayerSettings] = useStore('prayerSettings', NONE);
   const [contacts] = useStore('contacts', EMPTY);
   const [english] = useStore('english', NONE);
@@ -113,6 +114,7 @@ export default function Home() {
   };
 
   const goals = GOALS.filter((g) => score.active.includes(g.id));
+  const lastWeight = weightLog.reduce((a, b) => (!a || b.at > a.at ? b : a), null);
   const week = lastDays(7, today).map((key) => ({ key, value: commitment(data, key).overall }));
   const firstRun = !profile.setup;
 
@@ -201,6 +203,7 @@ export default function Home() {
             <ChevronRight size={18} className="muted flip-rtl shrink-0" />
           </Link>
         ))}
+        <ModuleLink id="weight" status={lastWeight ? L(`${num(lastWeight.weight, 1)} kg${lastWeight.fat != null ? ` · fat ${num(lastWeight.fat, 1)}%` : ''}`, `${num(lastWeight.weight, 1)} كجم${lastWeight.fat != null ? ` · دهون ${num(lastWeight.fat, 1)}٪` : ''}`) : L('Read your Bluetooth scale', 'اقرأ ميزانك بالبلوتوث')} />
         <Link to="/dashboard" className="card flex items-center gap-3 active:scale-[0.99]">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 dark:bg-white/10 dark:text-white" aria-hidden>
             <BarChart3 />
@@ -232,5 +235,22 @@ export default function Home() {
         <ProfileForm value={draft || profile} onChange={setDraft} />
       </Sheet>
     </div>
+  );
+}
+
+function ModuleLink({ id, status }) {
+  const { pick } = useLang();
+  const m = goalById(id);
+  return (
+    <Link to={m.path} className="card flex items-center gap-3 active:scale-[0.99]">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl" style={{ background: `${m.color}1F` }} aria-hidden>
+        {m.icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-bold">{pick(m.name)}</p>
+        <p className="muted truncate text-sm">{status}</p>
+      </div>
+      <ChevronRight size={18} className="muted flip-rtl shrink-0" />
+    </Link>
   );
 }

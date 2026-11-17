@@ -18,7 +18,7 @@ export const heartRateSupported = () => isNative || Boolean(globalThis.navigator
 export async function connectHeartRate(onBpm, onEnd = () => {}) {
   if (isNative) {
     const { BleClient } = await import('@capacitor-community/bluetooth-le');
-    await BleClient.initialize({ androidNeverForLocation: true });
+    await BleClient.initialize({ androidNeverForLocation: false });
     const device = await BleClient.requestDevice({ services: [SERVICE] });
     await BleClient.connect(device.deviceId, () => onEnd());
     await BleClient.startNotifications(device.deviceId, SERVICE, CHARACTERISTIC, (value) => onBpm(parseHeartRate(value)));

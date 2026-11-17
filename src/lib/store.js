@@ -22,7 +22,7 @@ const changeListeners = new Set();
 
 /** Keys that are copied to the cloud. `settings` and `device` stay on the device. */
 export const SYNC_KEYS = [
-  'profile', 'gymSessions', 'gymPlan', 'foodLog', 'foodCustom', 'foodPlan', 'foodMeals', 'foodMemory', 'water',
+  'profile', 'gymSessions', 'gymPlan', 'foodLog', 'foodCustom', 'foodPlan', 'foodMeals', 'foodMemory', 'weightLog', 'scales', 'water',
   'prayerLog', 'prayerSettings', 'quran', 'azkarLog', 'contacts', 'english', 'words',
 ];
 
