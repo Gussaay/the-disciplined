@@ -6,6 +6,7 @@ import { isNative } from './native';
 import { FITPRO_SERVICES, GROUP, CMD, ack, craft, createAssembler, fitproChars, initSequence, needsAck, parsePacket } from './fitpro';
 import { parseHeartRate } from './hrParse';
 import { hex } from './scaleParse';
+import { LS02, isLs02, ls02Cmd, parseLs02 } from './ls02';
 
 const HR_SERVICE = '0000180d-0000-1000-8000-00805f9b34fb';
 const HR_MEASUREMENT = '00002a37-0000-1000-8000-00805f9b34fb';
@@ -28,7 +29,7 @@ async function ble() {
 export async function pickWatch() {
   if (!isNative) throw Object.assign(new Error('The watch works in the Android app'), { code: 'watch-web' });
   const BleClient = await ble();
-  const device = await BleClient.requestDevice({ optionalServices: [...FITPRO_SERVICES, HR_SERVICE, BATTERY_SERVICE] });
+  const device = await BleClient.requestDevice({ optionalServices: [...FITPRO_SERVICES, LS02.general, LS02.data, HR_SERVICE, BATTERY_SERVICE] });
   return { id: device.deviceId, name: device.name || 'Watch' };
 }
 
@@ -63,6 +64,107 @@ export async function connectWatch({ id }, { profile = {}, onEvent = () => {}, o
       onEvent({ type: 'battery', level: v.getUint8(0) });
     } catch { /* not readable */ }
   };
+
+  // Realtek-chip watches (55FF/60FF services). Replies are read both as the
+  // LS02 protocol and as FitPro frames, since the FitPro app drives some of
+  // these chips with its own framing; whichever answers is used.
+  if (isLs02(services.map((x) => x.uuid.toLowerCase()))) {
+    const general = has(LS02.general);
+    let withResponse = general?.characteristics?.find((c) => c.uuid.toLowerCase() === LS02.generalWrite)?.properties?.write ?? true;
+    const writeTo = async (svc, chr, bytes, response) => {
+      log('out', bytes);
+      for (let i = 0; i < bytes.length; i += 20) {
+        const part = view(bytes.slice(i, i + 20));
+        if (response) await BleClient.write(id, svc, chr, part);
+        else await BleClient.writeWithoutResponse(id, svc, chr, part);
+      }
+    };
+    const sendGeneral = async (bytes) => {
+      try {
+        await writeTo(LS02.general, LS02.generalWrite, bytes, withResponse);
+      } catch (e) {
+        withResponse = !withResponse;
+        note(`write switched (${e?.message || e})`);
+        await writeTo(LS02.general, LS02.generalWrite, bytes, withResponse);
+      }
+    };
+    const sendData = (bytes) => writeTo(LS02.data, LS02.dataWrite, bytes, false).catch((e) => note(`data write: ${e?.message || e}`));
+    let framed = false;
+    const steps = new Map();
+    let stepsTimer = null;
+    const asm = createAssembler();
+    const profileNow = profile || {};
+    const dayEvent = (n) => ({
+      type: 'day',
+      steps: n,
+      distance: Math.round(n * ((Number(profileNow.height) || 170) * 0.415) / 100),
+      kcal: Math.round(n * (Number(profileNow.weight) || 70) * 0.0005),
+    });
+    const onAny = (dv) => {
+      const chunk = bytesOf(dv);
+      log('in', chunk);
+      if (chunk[0] === 0xcd || framed) {
+        for (const packet of asm.push(chunk)) {
+          if (!framed) note('the watch answers in FitPro frames');
+          framed = true;
+          if (needsAck(packet)) sendGeneral(ack(packet)).catch(() => {});
+          const event = parsePacket(packet);
+          if (event && event.type !== 'other') onEvent(event);
+        }
+        if (chunk[0] === 0xcd) return;
+      }
+      const event = parseLs02(chunk, { steps });
+      if (!event) return;
+      if (event.type === 'day') onEvent(dayEvent(event.steps));
+      else if (event.type === 'stepsChanged') {
+        clearTimeout(stepsTimer);
+        stepsTimer = setTimeout(() => sendGeneral(ls02Cmd.steps()).catch(() => {}), 1500);
+      } else if (event.type !== 'stepsRow') onEvent(event);
+    };
+    for (const [svc, chr] of [[LS02.general, LS02.generalNotify], [LS02.data, LS02.dataNotify], ...LS02.extra]) {
+      try {
+        await BleClient.startNotifications(id, svc, chr, onAny);
+        note(`listening ${chr.slice(4, 8)}`);
+      } catch (e) {
+        note(`${chr.slice(4, 8)}: ${e?.message || e}`);
+      }
+    }
+    const refresh = async () => {
+      if (framed) await sendGeneral(craft(GROUP.sports, CMD.stepsToday, [0x01]));
+      else {
+        steps.clear();
+        await sendGeneral(ls02Cmd.steps());
+        await sendGeneral(ls02Cmd.battery());
+      }
+      await readBattery();
+    };
+    const start = [ls02Cmd.time(), ls02Cmd.user(profileNow), ls02Cmd.battery(), ls02Cmd.steps()];
+    for (const packet of start) {
+      await sendGeneral(packet).catch((e) => note(`send: ${e?.message || e}`));
+      await sleep(250);
+    }
+    await sendData(ls02Cmd.heartAll());
+    await sleep(1500);
+    // Nothing understood yet: try the FitPro start-up on the same channel.
+    if (!framed && !steps.size) {
+      note('no LS02 answer yet, trying FitPro frames');
+      for (const packet of initSequence(profileNow)) {
+        await sendGeneral(packet).catch(() => {});
+        await sleep(220);
+      }
+    }
+    await readBattery();
+    return {
+      protocol: 'realtek',
+      measureHint: true,
+      measureHeart: () => (framed ? sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x01])) : sendData(ls02Cmd.heartOn())),
+      stopHeart: () => (framed ? sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x00])) : sendData(ls02Cmd.heartAll())),
+      findWatch: () => (framed ? sendGeneral(craft(GROUP.general, CMD.findBand, [0x01])) : Promise.reject(new Error('Not supported on this watch yet'))),
+      refresh,
+      syncTime: () => (framed ? sendGeneral(initSequence(profileNow)[1]) : sendGeneral(ls02Cmd.time())),
+      disconnect: () => BleClient.disconnect(id).catch(() => {}),
+    };
+  }
 
   // The FitPro service: the listed one, or, when the phone listed nothing,
   // each known id tried directly.
