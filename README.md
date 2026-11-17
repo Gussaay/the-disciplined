@@ -143,6 +143,17 @@ signing in later from Settings adopts what was recorded.
 
 Until then the Google button shows on the website only.
 
+## Training machines
+
+The equipment list shows a photo of each machine (photos from the gym in
+`public/gym`, with the instruction labels on the machines). Any machine can get
+your own photo ("Add a photo of this machine at my gym", kept on the phone).
+Each exercise shows its main and helping muscles on a front and back body
+map, an animated figure of the movement, setting up the machine and numbered
+steps (`src/data/exerciseGuide.js`, `src/components/ExerciseMotion.jsx`,
+`src/components/MuscleMap.jsx`). The same guide opens from the info button
+during a workout.
+
 ## Tasks
 
 One list for the app's own goals of the day (the five prayers, training,

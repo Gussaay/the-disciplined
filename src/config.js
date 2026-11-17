@@ -37,7 +37,7 @@ export const MODULES = [
     motto: { en: 'One thing at a time', ar: 'خطوة بعد خطوة' },
   },
   {
-    id: 'watch', path: '/watch', icon: '⌚', color: '#E0702E', dark: '#8A3A12', name: { en: 'My watch', ar: 'ساعتي' },
+    id: 'watch', path: '/watch', icon: '⌚', color: '#0E9384', dark: '#0A5A52', name: { en: 'My watch', ar: 'ساعتي' },
     motto: { en: 'Every step counts', ar: 'كل خطوة تُحسب' },
   },
 ];
