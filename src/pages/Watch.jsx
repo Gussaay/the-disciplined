@@ -15,7 +15,8 @@ export default function Watch() {
   const { L, num, date, time } = useLang();
   const toast = useToast();
   const confirm = useConfirm();
-  const [profile] = useStore('profile', NONE);
+  const [profile, setProfile] = useStore('profile', NONE);
+  const [wset, setWset] = useStore('watchSettings', NONE);
   const [watch, setWatch] = useStore('watch', null);
   const [log] = useStore('watchLog', NONE);
   const [busy, setBusy] = useState('');
@@ -144,7 +145,7 @@ export default function Watch() {
               </div>
             </div>
             {s && s.protocol !== 'heart-rate' && s.measureHint && busy === 'heart' && (
-              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('Now open the heart-rate screen on the watch and keep still. The reading appears here.', 'افتح الآن شاشة نبض القلب في الساعة وابقَ ثابتاً. ستظهر القراءة هنا.')}</p>
+              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('The phone asked the watch to measure. Keep still. If nothing shows within 30 seconds, open the heart screen on the watch once, then send me the connection log.', 'طلب الهاتف من الساعة القياس. ابقَ ثابتاً. إن لم تظهر قراءة خلال 30 ثانية فافتح شاشة النبض في الساعة مرة، ثم أرسل لي سجل الاتصال.')}</p>
             )}
             {s && s.protocol !== 'heart-rate' && (
               <button
@@ -174,6 +175,36 @@ export default function Watch() {
                 <Clock size={16} /> {L('Set time', 'اضبط الوقت')}
               </button>
             </div>
+          )}
+
+          {s?.settings && (
+            <Section title={L('Watch settings', 'إعدادات الساعة')}>
+              <div className="card space-y-3">
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Daily step goal', 'هدف الخطوات اليومي')}</span>
+                  <select className="input !w-32" value={goal} onChange={(e) => setProfile({ ...profile, stepGoal: Number(e.target.value) })}>
+                    {[4000, 6000, 8000, 10000, 12000, 15000].map((g) => <option key={g} value={g}>{num(g)}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Screen stays on', 'مدة إضاءة الشاشة')}</span>
+                  <select className="input !w-32" value={wset.screen ?? 10} onChange={(e) => setWset({ ...wset, screen: Number(e.target.value) })}>
+                    {[5, 10, 15, 20, 30].map((v) => <option key={v} value={v}>{L(`${v} s`, `${v} ث`)}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Raise wrist to wake the screen', 'ارفع المعصم لإضاءة الشاشة')}</span>
+                  <input type="checkbox" className="h-5 w-5" checked={wset.wrist ?? true} onChange={(e) => setWset({ ...wset, wrist: e.target.checked })} />
+                </label>
+                <button
+                  className="btn-primary w-full"
+                  disabled={live.status !== 'connected' || busy === 'settings'}
+                  onClick={() => act('settings', () => s.applySettings({ stepGoal: goal, screen: wset.screen ?? 10, wrist: wset.wrist ?? true }), L('Sent to the watch', 'أُرسلت إلى الساعة'))}
+                >
+                  {L('Send to the watch', 'أرسل إلى الساعة')}
+                </button>
+              </div>
+            </Section>
           )}
 
           <Section title={L('Steps, last 7 days', 'الخطوات، آخر 7 أيام')}>

@@ -30,6 +30,7 @@ export async function link(watch, profile) {
   try {
     const session = await connectWatch(watch, {
       profile,
+      watchSettings: read('watchSettings') || {},
       onEvent: (e) => {
         if (e.type === 'log') {
           live.log = [...live.log.slice(-80), `${new Date().toISOString().slice(11, 19)} ${e.dir === 'out' ? '→' : e.dir === 'info' ? '·' : '←'} ${e.hex}`];
