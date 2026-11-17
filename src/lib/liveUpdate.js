@@ -57,6 +57,9 @@ async function getJson(path) {
   }
 }
 
+const withTimeout = (promise, ms, what) =>
+  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(`${what} did not answer`)), ms))]);
+
 let updater = null;
 async function getUpdater() {
   if (!updater) updater = (await import('@capgo/capacitor-updater')).CapacitorUpdater;
@@ -73,9 +76,12 @@ export async function checkForUpdates() {
   checking = true;
   set({ checking: true, error: null });
   try {
-    const U = await getUpdater();
-    const info = await CapApp.getInfo();
-    const current = await U.current().catch(() => null);
+    // Every plugin call has a time limit: one call that never answered left
+    // the check spinning forever, so no update was ever looked for again.
+    const info = await withTimeout(CapApp.getInfo(), 5000, 'app info');
+    set({ native: { version: info.version, build: info.build }, bundle: state.bundle || info.version });
+    const U = await withTimeout(getUpdater(), 8000, 'updater');
+    const current = await withTimeout(U.current(), 5000, 'current bundle').catch(() => null);
     const running = current?.bundle?.version && current.bundle.version !== 'builtin' ? current.bundle.version : info.version;
     set({ native: { version: info.version, build: info.build }, bundle: running });
 
@@ -96,10 +102,10 @@ export async function checkForUpdates() {
     });
     if (fit === 'install' && state.ready !== manifest.version) {
       set({ downloading: true });
-      const { bundles = [] } = await U.list().catch(() => ({ bundles: [] }));
+      const { bundles = [] } = await withTimeout(U.list(), 5000, 'list').catch(() => ({ bundles: [] }));
       let bundle = bundles.find((b) => b.version === manifest.version && b.status !== 'error');
-      if (!bundle) bundle = await U.download({ url: manifest.url, version: manifest.version, checksum: manifest.checksum });
-      await U.next({ id: bundle.id });
+      if (!bundle) bundle = await withTimeout(U.download({ url: manifest.url, version: manifest.version, checksum: manifest.checksum }), 120_000, 'download');
+      await withTimeout(U.next({ id: bundle.id }), 5000, 'next');
       set({ ready: manifest.version, downloading: false, readyId: bundle.id, notes: manifest.notes || null });
       notifyOnce(`ota-${manifest.version}`, {
         title: 'Update downloaded',
@@ -151,7 +157,7 @@ export function startUpdates() {
   started = true;
   // Without this on every start, the updater thinks the new bundle is broken
   // and goes back to the previous one.
-  getUpdater().then((U) => U.notifyAppReady()).catch(() => {});
+  getUpdater().then((U) => withTimeout(U.notifyAppReady(), 5000, 'ready')).catch(() => {});
   setTimeout(checkForUpdates, 3000);
   // Android keeps the app in memory for days, so "next start" can be far
   // away: check whenever the person comes back, and apply a downloaded
