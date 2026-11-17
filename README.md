@@ -143,6 +143,26 @@ signing in later from Settings adopts what was recorded.
 
 Until then the Google button shows on the website only.
 
+## Fingerprint, Google and locked keys
+
+- **Google sign-in** works on the web straight away. On the phone it needs the
+  signing key's SHA-1 (`1B:2E:3E:A5:E9:9D:D0:4A:F8:E5:17:80:80:F3:81:CA:88:06:9D:D2`)
+  added to the Firebase Android app `com.the.disciplined`. The Web client ID is
+  built in; `VITE_GOOGLE_WEB_CLIENT_ID` overrides it.
+- **Fingerprint sign-in** (Android): after an email sign-in the app offers to keep
+  the login in the phone's secure keystore; next time one touch signs in.
+  Settings, Security turns it off.
+- **App lock**: Settings, Security can lock the app behind the fingerprint. It
+  locks again after a minute in the background.
+- **API keys** are shown masked and locked once saved; press Edit to change or
+  remove one.
+- **Module themes**: each goal page has its own colour and illustration
+  (`src/components/Illustrations.jsx`, colours and mottos in `GOALS` in
+  `src/config.js`).
+
+The fingerprint plugin is native, so phones need the new APK once; OTA
+bundles after that install as usual.
+
 ## Updates
 
 - **Website:** updates itself in the background (service worker).

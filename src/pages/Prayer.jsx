@@ -85,6 +85,7 @@ export default function Prayer() {
 
   return (
     <Page
+      goal="prayer"
       title={L('Prayer', 'الصلاة')}
       subtitle={hijri(fromKey(day))}
       action={

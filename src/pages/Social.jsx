@@ -66,6 +66,7 @@ export default function Social() {
 
   return (
     <Page
+      goal="social"
       title={L('Keeping in touch', 'صلة الرحم والتواصل')}
       subtitle={
         contacts.length

@@ -103,7 +103,7 @@ jobs:
       # fine and then fails only when the feature is used.
       - name: Check the native plugins really synced
         run: |
-          for plugin in capacitor-local-notifications capacitor-community-bluetooth-le capgo-capacitor-health capgo-capacitor-social-login capgo-capacitor-updater; do
+          for plugin in capacitor-local-notifications capacitor-community-bluetooth-le capgo-capacitor-health capgo-capacitor-social-login capgo-capacitor-updater capgo-capacitor-native-biometric; do
             grep -qi "$plugin" android/capacitor.settings.gradle \
               || { echo "::error::$plugin is missing from the Android project"; exit 1; }
           done

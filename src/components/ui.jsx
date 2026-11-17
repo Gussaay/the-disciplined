@@ -3,14 +3,18 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, X } from 'lucide-react';
 import { useLang } from '../i18n';
+import { goalById } from '../config';
+import Illustration from './Illustrations';
 
 /** A screen: sticky title bar with an optional back button and action. */
-export function Page({ title, subtitle, back, action, children, tone = 'plain' }) {
+export function Page({ title, subtitle, back, action, children, tone = 'plain', goal }) {
   const navigate = useNavigate();
-  const { L } = useLang();
+  const { L, pick } = useLang();
   const dark = tone === 'brand';
+  const g = goal ? goalById(goal) : null;
+  const vars = g ? { '--accent': g.color, '--accent-dark': g.dark, '--hero-bg': g.dark } : undefined;
   return (
-    <div className="mx-auto min-h-screen max-w-2xl pb-28">
+    <div className={`mx-auto min-h-screen max-w-2xl pb-28 ${g ? 'themed' : ''}`} style={vars}>
       <header
         className={`pt-safe sticky top-0 z-20 ${dark ? 'bg-brand-800 text-white' : 'bg-paper/95 backdrop-blur dark:bg-[#0B1413]/95'}`}
       >
@@ -31,7 +35,21 @@ export function Page({ title, subtitle, back, action, children, tone = 'plain' }
           {action}
         </div>
       </header>
-      <main className="space-y-4 px-4 pt-2">{children}</main>
+      <main className="space-y-4 px-4 pt-2">
+        {g && (
+          <div
+            className="relative flex items-center gap-3 overflow-hidden rounded-3xl px-5 py-4 text-white shadow-sm"
+            style={{ background: `linear-gradient(135deg, ${g.color}, ${g.dark})` }}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-white/70">{pick(g.name)}</p>
+              <p className="mt-1 text-lg font-extrabold leading-snug">{pick(g.motto)}</p>
+            </div>
+            <Illustration goal={g.id} className="h-20 w-32 shrink-0" />
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

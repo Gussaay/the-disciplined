@@ -400,7 +400,7 @@ export default function English() {
   const ready = Boolean(english.level);
 
   return (
-    <Page title={L('English', 'اللغة الإنجليزية')} subtitle={ready ? L(`${studyStreak(english.log)} day streak`, `${studyStreak(english.log)} أيام متتالية`) : undefined}>
+    <Page goal="english" title={L('English', 'اللغة الإنجليزية')} subtitle={ready ? L(`${studyStreak(english.log)} day streak`, `${studyStreak(english.log)} أيام متتالية`) : undefined}>
       {!ready ? (
         <Setup english={english} setEnglish={setEnglish} />
       ) : (
