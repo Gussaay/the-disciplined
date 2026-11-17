@@ -98,7 +98,47 @@ function English() {
   );
 }
 
-const ART = { gym: Gym, food: Food, prayer: Prayer, social: Social, english: English };
+function Weight() {
+  return (
+    <>
+      <circle cx="80" cy="50" r="40" fill={W3} />
+      {/* scale platform */}
+      <rect x="34" y="40" width="92" height="46" rx="12" fill={W} />
+      <rect x="40" y="46" width="80" height="34" rx="9" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="2" />
+      {/* display */}
+      <rect x="60" y="50" width="40" height="14" rx="4" fill="#1f2937" />
+      <text x="80" y="61" textAnchor="middle" fontFamily="monospace" fontWeight="700" fontSize="10" fill={GOLD}>57.2</text>
+      {/* electrodes */}
+      <rect x="44" y="68" width="22" height="6" rx="3" fill="rgba(0,0,0,0.12)" />
+      <rect x="94" y="68" width="22" height="6" rx="3" fill="rgba(0,0,0,0.12)" />
+      {/* bluetooth waves */}
+      <path d="M132 22a14 14 0 0 1 0 20M138 16a22 22 0 0 1 0 32" stroke={GOLD} strokeWidth="3" fill="none" strokeLinecap="round" />
+      <circle cx="126" cy="32" r="3.5" fill={GOLD} />
+    </>
+  );
+}
+
+function Tasks() {
+  return (
+    <>
+      <circle cx="78" cy="50" r="40" fill={W3} />
+      {/* clipboard */}
+      <rect x="44" y="16" width="64" height="76" rx="10" fill={W} />
+      <rect x="62" y="10" width="28" height="12" rx="5" fill={GOLD} />
+      {[34, 52, 70].map((y, i) => (
+        <g key={y}>
+          <rect x="54" y={y - 6} width="12" height="12" rx="3" fill={i < 2 ? GOLD : 'none'} stroke={i < 2 ? 'none' : 'rgba(0,0,0,0.2)'} strokeWidth="2" />
+          {i < 2 && <path d={`M57 ${y}l3 3 5-6`} stroke="#1f2937" strokeWidth="2" fill="none" strokeLinecap="round" />}
+          <path d={`M72 ${y}h26`} stroke="rgba(0,0,0,0.15)" strokeWidth="4" strokeLinecap="round" />
+        </g>
+      ))}
+      {/* spark */}
+      <path d="M128 18l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill={GOLD} />
+    </>
+  );
+}
+
+const ART = { gym: Gym, food: Food, prayer: Prayer, social: Social, english: English, weight: Weight, tasks: Tasks };
 
 export default function Illustration({ goal, className = '' }) {
   const Art = ART[goal];

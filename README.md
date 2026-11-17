@@ -143,6 +143,30 @@ signing in later from Settings adopts what was recorded.
 
 Until then the Google button shows on the website only.
 
+## Weight and body (Bluetooth scale)
+
+The Weight page reads OKOK / Chipsea body-fat scales straight from their
+Bluetooth advertisements, so neither pairing nor the OKOK app is needed.
+Formats handled (`src/lib/scaleParse.js`, after openScale's OKOK drivers):
+`0x20CA` (weight + impedance), `0x11CA` (weight), `0x??C0` (weight +
+impedance, MAC inside) and `0xF0FF`. An unknown scale can be taught from its
+display ("Find" then "Teach the weight"), and "Copy capture" copies the raw
+bytes for support. Body fat, muscle, water, visceral fat, bone, protein and
+BMR come from the impedance with open formulas (`src/lib/bodyComp.js`), so
+they can differ from OKOK's by a few points. Android only (web adds weight by
+hand). Scanning needs Location on, as Android requires for Bluetooth scans.
+
+### Logging food
+
+- **Add** opens a pop-up that starts on **For you**: the foods you eat most at
+  that meal with your usual amount, and the whole meal from last time.
+- Tap any logged food to change its amount, move it to another meal, match it
+  to the nutrition table, or delete it. Every delete asks first.
+- **Photo** has a live camera, a normal photo and the gallery. The AI is given
+  the names you log often, and each food it finds is matched to the nutrition
+  table. A match you pick is remembered (`foodMemory`, synced) and used the
+  next time that food is seen.
+
 ## Fingerprint, Google and locked keys
 
 - **Google sign-in** works on the web straight away. On the phone it needs the

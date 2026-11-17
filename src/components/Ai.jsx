@@ -23,7 +23,7 @@ export function useAiError() {
 }
 
 /** Opens the camera (or the gallery) and hands back a small JPEG. */
-export function PhotoButton({ onPhoto, children, className = 'btn-soft', busy }) {
+export function PhotoButton({ onPhoto, children, className = 'btn-soft', busy, gallery = false, icon }) {
   const input = useRef();
   const [working, setWorking] = useState(false);
   const { L } = useLang();
@@ -34,7 +34,7 @@ export function PhotoButton({ onPhoto, children, className = 'btn-soft', busy })
         ref={input}
         type="file"
         accept="image/*"
-        capture="environment"
+        capture={gallery ? undefined : 'environment'}
         className="hidden"
         onChange={async (e) => {
           const file = e.target.files?.[0];
@@ -54,7 +54,7 @@ export function PhotoButton({ onPhoto, children, className = 'btn-soft', busy })
         {working || busy ? (
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
         ) : (
-          <Camera size={18} />
+          icon || <Camera size={18} />
         )}
         {children}
       </button>

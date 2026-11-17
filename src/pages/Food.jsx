@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { BookmarkPlus, ChevronLeft, ChevronRight, ClipboardCopy, Database, Droplets, Minus, Plus, Sparkles, X } from 'lucide-react';
+import { BookmarkPlus, ChevronLeft, ChevronRight, ClipboardCopy, Database, Droplets, Minus, Pencil, Plus, Sparkles, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
-import { Bars, Meter, Page, Ring, Section, Segmented, Sheet, useToast } from '../components/ui';
+import { Bars, Meter, Page, Ring, Section, Segmented, Sheet, useConfirm, useToast } from '../components/ui';
+import { EditEntry } from '../components/FoodTools';
 import AddFood, { MacroLine } from '../components/AddFood';
 import { SaveMeal, formatAmount } from '../components/FoodDatabase';
 import { DAILY_VALUE, MICRO_GROUPS, NUTRIENT_NAMES, microTotals } from '../lib/foodDb';
@@ -28,6 +29,7 @@ function mealNow() {
 export default function Food() {
   const { L, pick, date, num, lang } = useLang();
   const toast = useToast();
+  const confirm = useConfirm();
   const aiError = useAiError();
   const [profile] = useStore('profile', NONE);
   const [log, setLog] = useStore('foodLog', NONE);
@@ -40,6 +42,7 @@ export default function Food() {
   const [ideas, setIdeas] = useState(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const today = dayKey();
   const planning = view === 'plan';
@@ -55,6 +58,16 @@ export default function Food() {
   const add = (meal, items) => {
     save([...entries, ...items.map((item) => ({ ...item, id: uid(), meal }))]);
     toast(L(`Added to ${pick(MEALS.find((m) => m.id === meal).name)}`, `أضيف إلى ${pick(MEALS.find((m) => m.id === meal).name)}`));
+  };
+
+  const removeEntry = async (e) => {
+    const ok = await confirm({
+      title: L(`Delete ${pick(e.name)}?`, `حذف ${pick(e.name)}؟`),
+      body: L('It comes off this meal and the day’s totals.', 'سيُحذف من هذه الوجبة ومن مجموع اليوم.'),
+    });
+    if (!ok) return;
+    save(entries.filter((x) => x.id !== e.id));
+    toast(L('Deleted', 'حُذف'));
   };
 
   const suggestions = useMemo(
@@ -185,6 +198,20 @@ export default function Food() {
         </div>
       )}
 
+      {!planning && day === today && !entries.some((e) => e.meal === mealNow()) && (() => {
+        const meal = MEALS.find((m) => m.id === mealNow());
+        return (
+          <button className="card flex w-full items-center gap-3 text-start active:scale-[0.99]" onClick={() => setAddTo(meal.id)}>
+            <span className="text-3xl">{meal.icon}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-extrabold">{L(`Log your ${pick(meal.name).toLowerCase()}`, `سجّل ${pick(meal.name)}`)}</span>
+              <span className="muted block text-sm">{L('Your usual foods, a photo or the live camera', 'أطعمتك المعتادة أو صورة أو الكاميرا المباشرة')}</span>
+            </span>
+            <span className="btn-primary !min-h-[40px] !px-3"><Plus size={18} /></span>
+          </button>
+        );
+      })()}
+
       {entries.length > 0 && <MicroPanel entries={entries} />}
 
       {MEALS.map((meal) => {
@@ -210,14 +237,17 @@ export default function Food() {
             {items.length > 0 && (
               <div className="card divide-y divide-brand-900/10 !py-0 dark:divide-white/10">
                 {items.map((e) => (
-                  <div key={e.id} className="flex items-center gap-2 py-2.5">
-                    <div className="min-w-0 flex-1">
+                  <div key={e.id} className="flex items-center gap-1 py-1.5">
+                    <button className="min-w-0 flex-1 rounded-xl py-1 text-start active:bg-black/5 dark:active:bg-white/5" onClick={() => setEditing(e)} aria-label={L(`Edit ${pick(e.name)}`, `تعديل ${pick(e.name)}`)}>
                       <p className="truncate font-medium">
                         {pick(e.name)} <span className="muted tabular text-sm font-normal">· {Math.round(e.grams)} {L('g', 'جم')}</span>
                       </p>
                       <MacroLine item={e} />
-                    </div>
-                    <button className="muted flex h-10 w-10 shrink-0 items-center justify-center" aria-label={L('Remove', 'حذف')} onClick={() => save(entries.filter((x) => x.id !== e.id))}>
+                    </button>
+                    <button className="muted flex h-10 w-10 shrink-0 items-center justify-center" aria-label={L('Edit', 'تعديل')} onClick={() => setEditing(e)}>
+                      <Pencil size={16} />
+                    </button>
+                    <button className="muted flex h-10 w-10 shrink-0 items-center justify-center" aria-label={L('Remove', 'حذف')} onClick={() => removeEntry(e)}>
                       <X size={18} />
                     </button>
                   </div>
@@ -283,7 +313,26 @@ export default function Food() {
         onClose={() => setAddTo(null)}
         title={addTo ? L(`Add to ${pick(MEALS.find((m) => m.id === addTo).name)}`, `إضافة إلى ${pick(MEALS.find((m) => m.id === addTo).name)}`) : ''}
         onAdd={(items) => add(addTo, items)}
+        meal={addTo}
+        current={addTo ? entries.filter((e) => e.meal === addTo) : undefined}
       />
+
+      {editing && (
+        <EditEntry
+          entry={editing}
+          onClose={() => setEditing(null)}
+          onSave={(next) => {
+            save(entries.map((x) => (x.id === next.id ? next : x)));
+            setEditing(null);
+            toast(L('Saved', 'حُفظ'));
+          }}
+          onDelete={(e) => {
+            save(entries.filter((x) => x.id !== e.id));
+            setEditing(null);
+            toast(L('Deleted', 'حُذف'));
+          }}
+        />
+      )}
 
       <Sheet open={Boolean(saving)} onClose={() => setSaving(null)} title={L('Save as a meal', 'احفظها كوجبة')}>
         {saving && (

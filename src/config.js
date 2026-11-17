@@ -26,7 +26,19 @@ export const GOALS = [
   },
 ];
 
-export const goalById = (id) => GOALS.find((g) => g.id === id);
+/** Modules that are not daily goals but share the look of one. */
+export const MODULES = [
+  {
+    id: 'weight', path: '/weight', icon: '⚖️', color: '#2F7FBF', dark: '#1B4A73', name: { en: 'Weight and body', ar: 'الوزن والجسم' },
+    motto: { en: 'Measure, then improve', ar: 'قِس ثم حسّن' },
+  },
+  {
+    id: 'tasks', path: '/tasks', icon: '✅', color: '#7A5BC7', dark: '#47307F', name: { en: 'Tasks', ar: 'المهام' },
+    motto: { en: 'One thing at a time', ar: 'خطوة بعد خطوة' },
+  },
+];
+
+export const goalById = (id) => GOALS.find((g) => g.id === id) || MODULES.find((g) => g.id === id);
 
 // Google sign-in inside the Android app uses the OAuth "Web client ID" of the
 // Firebase project (Authentication > Sign-in method > Google > Web SDK
