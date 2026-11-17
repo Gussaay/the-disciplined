@@ -89,6 +89,7 @@ export default function Gym() {
 
   return (
     <Page
+      goal="gym"
       title={L('Training', 'التمرين')}
       subtitle={L(`${done} of ${goal} sessions this week`, `${done} من ${goal} حصص هذا الأسبوع`)}
       action={

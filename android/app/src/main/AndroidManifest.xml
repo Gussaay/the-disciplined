@@ -49,6 +49,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Sign in with fingerprint and the app lock -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <!-- Prayer times for where the person is (asked only when they tap "Use my location"). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

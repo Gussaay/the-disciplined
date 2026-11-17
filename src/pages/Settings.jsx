@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Download, ExternalLink, KeyRound, LogIn, LogOut, RefreshCw, Upload } from 'lucide-react';
+import { Check, Download, ExternalLink, Eye, EyeOff, KeyRound, Lock, LogIn, LogOut, Pencil, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { biometricAvailable, forgetLogin, hasSavedLogin, verify } from '../lib/biometric';
 import UpdateBanner, { useUpdates } from '../components/UpdateBanner';
 import { checkForUpdates } from '../lib/liveUpdate';
 import { useLang } from '../i18n';
@@ -96,6 +97,148 @@ function Account() {
       <button className="btn-primary w-full" onClick={() => navigate('/signin')}>
         <LogIn size={18} /> {L('Sign in or create an account', 'سجّل الدخول أو أنشئ حساباً')}
       </button>
+    </div>
+  );
+}
+
+/** "AIza••••••••Xk3Q": enough to recognise a key without showing it. */
+const maskKey = (key) => (key.length > 10 ? `${key.slice(0, 4)}${'•'.repeat(8)}${key.slice(-4)}` : '•'.repeat(8));
+
+/**
+ * An API key field. Once saved it is shown masked and cannot be changed by a
+ * stray tap: "Edit" opens it again, and Save or Cancel closes it.
+ */
+function KeyField({ label, placeholder, value, onSave, getUrl, getLabel }) {
+  const { L } = useLang();
+  const toast = useToast();
+  const [editing, setEditing] = useState(!value);
+  const [draft, setDraft] = useState('');
+  const [show, setShow] = useState(false);
+
+  if (!editing && value) {
+    return (
+      <div className="rounded-2xl border border-brand-900/10 p-3 dark:border-white/10">
+        <p className="text-sm font-medium">{label}</p>
+        <div className="mt-1 flex items-center gap-2">
+          <Lock size={16} className="shrink-0 text-brand-600" />
+          <span className="tabular min-w-0 flex-1 truncate font-mono text-sm" dir="ltr" style={{ textAlign: 'start' }}>{maskKey(value)}</span>
+          <button className="btn-soft !min-h-[36px] !px-3 text-sm" onClick={() => { setDraft(value); setEditing(true); }}>
+            <Pencil size={14} /> {L('Edit', 'تعديل')}
+          </button>
+        </div>
+        <p className="muted mt-1 text-xs">{L('Saved on this device. Press Edit to change or remove it.', 'محفوظ على هذا الجهاز. اضغط «تعديل» لتغييره أو حذفه.')}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-2xl border border-brand-900/10 p-3 dark:border-white/10">
+      <Field label={label}>
+        <div className="relative">
+          <input
+            className="input !pe-12" dir="ltr" type={show ? 'text' : 'password'} autoComplete="off" placeholder={placeholder}
+            value={draft} onChange={(e) => setDraft(e.target.value.trim())}
+          />
+          <button
+            type="button" className="muted absolute end-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center"
+            aria-label={show ? L('Hide key', 'إخفاء المفتاح') : L('Show key', 'إظهار المفتاح')} onClick={() => setShow(!show)}
+          >
+            {show ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="btn-primary flex-1"
+          disabled={!draft || draft === value}
+          onClick={() => {
+            onSave(draft);
+            setEditing(false);
+            setShow(false);
+            toast(L('Key saved', 'حُفظ المفتاح'));
+          }}
+        >
+          <Check size={18} /> {L('Save', 'حفظ')}
+        </button>
+        {value && (
+          <>
+            <button className="btn-soft" onClick={() => { setEditing(false); setDraft(''); setShow(false); }}>{L('Cancel', 'إلغاء')}</button>
+            <button
+              className="btn-ghost text-red-600"
+              onClick={() => {
+                onSave('');
+                setDraft('');
+                toast(L('Key removed', 'حُذف المفتاح'));
+              }}
+            >
+              <Trash2 size={16} /> {L('Remove', 'حذف')}
+            </button>
+          </>
+        )}
+      </div>
+      {getUrl && (
+        <button className="btn-ghost w-full text-sm" onClick={() => openUrl(getUrl)}>
+          <KeyRound size={16} /> {getLabel} <ExternalLink size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Fingerprint: the app lock and fingerprint sign-in (Android app only). */
+function Security() {
+  const { L } = useLang();
+  const toast = useToast();
+  const [device, setDevice] = useStore('device', NONE);
+  const [state, setState] = useState({ available: null, saved: false });
+  useEffect(() => {
+    Promise.all([biometricAvailable(), hasSavedLogin()]).then(([available, saved]) => setState({ available, saved }));
+  }, []);
+  if (state.available === null) return null;
+  if (!state.available) {
+    return (
+      <p className="card muted text-sm">
+        {L('Set up a fingerprint in the phone settings to lock the app and sign in with it.', 'سجّل بصمة في إعدادات الهاتف لتقفل بها التطبيق وتسجّل الدخول.')}
+      </p>
+    );
+  }
+  return (
+    <div className="card divide-y divide-brand-900/10 !py-1 dark:divide-white/10">
+      <Toggle
+        label={L('Lock the app with my fingerprint', 'اقفل التطبيق ببصمتي')}
+        hint={L('Asked when the app opens and after a minute away', 'تُطلب عند فتح التطبيق وبعد الابتعاد دقيقة')}
+        checked={device.biometricLock === true}
+        onChange={async (on) => {
+          try {
+            await verify(L('Confirm it is you', 'تأكيد أنك أنت'), L('Fingerprint', 'البصمة'));
+            setDevice({ ...device, biometricLock: on });
+          } catch {
+            toast(L('Fingerprint not confirmed', 'لم تُؤكَّد البصمة'), 'error');
+          }
+        }}
+      />
+      <div className="flex min-h-[44px] items-center gap-3 py-2">
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">{L('Sign in with fingerprint', 'الدخول بالبصمة')}</span>
+          <span className="muted block text-xs">
+            {state.saved
+              ? L('On. Your email sign-in is kept in the phone’s secure storage.', 'مفعّل. بيانات دخولك محفوظة في التخزين الآمن للهاتف.')
+              : L('Turns on when you sign in with email and tick “Sign in with my fingerprint next time”.', 'يُفعَّل عند الدخول بالبريد مع اختيار «الدخول ببصمتي في المرة القادمة».')}
+          </span>
+        </span>
+        {state.saved && (
+          <button
+            className="btn-soft !min-h-[36px] !px-3 text-sm"
+            onClick={async () => {
+              await forgetLogin();
+              setState({ ...state, saved: false });
+              toast(L('Fingerprint sign-in turned off', 'أُوقف الدخول بالبصمة'));
+            }}
+          >
+            {L('Turn off', 'إيقاف')}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -256,26 +399,22 @@ export default function Settings() {
                 'يتعرف الذكاء الاصطناعي على أجهزة النادي والطعام من الصور، ويقترح الوجبات، ويكتب برنامج التمرين، ويعلّمك الإنجليزية. يحتاج إلى مفتاح Gemini (مجاني من Google) أو مفتاح Groq (مجاني من Groq) أو كليهما، فيتولى Groq الطلبات حين يكون Gemini مشغولاً أو نفدت حصته اليومية. تُحفظ المفاتيح على هذا الجهاز فقط.',
               )}
             </p>
-            <button className="btn-soft w-full" onClick={() => openUrl('https://aistudio.google.com/apikey')}>
-              <KeyRound size={18} /> {L('Get a free key from Google AI Studio', 'احصل على مفتاح مجاني من Google AI Studio')} <ExternalLink size={14} />
-            </button>
-            <Field label={L('Gemini API key', 'مفتاح Gemini API')}>
-              <input
-                className="input" dir="ltr" type="password" autoComplete="off" placeholder="AIza…"
-                value={device.geminiKey || ''}
-                onChange={(e) => setDevice({ ...device, geminiKey: e.target.value.trim() })}
-              />
-            </Field>
-            <button className="btn-soft w-full" onClick={() => openUrl('https://console.groq.com/keys')}>
-              <KeyRound size={18} /> {L('Get a free key from Groq', 'احصل على مفتاح مجاني من Groq')} <ExternalLink size={14} />
-            </button>
-            <Field label={L('Groq API key (backup)', 'مفتاح Groq API (احتياطي)')}>
-              <input
-                className="input" dir="ltr" type="password" autoComplete="off" placeholder="gsk_…"
-                value={device.groqKey || ''}
-                onChange={(e) => setDevice({ ...device, groqKey: e.target.value.trim() })}
-              />
-            </Field>
+            <KeyField
+              label={L('Gemini API key', 'مفتاح Gemini API')}
+              placeholder="AIza…"
+              value={device.geminiKey || ''}
+              getUrl="https://aistudio.google.com/apikey"
+              getLabel={L('Get a free key from Google AI Studio', 'احصل على مفتاح مجاني من Google AI Studio')}
+              onSave={(geminiKey) => setDevice({ ...device, geminiKey })}
+            />
+            <KeyField
+              label={L('Groq API key (backup)', 'مفتاح Groq API (احتياطي)')}
+              placeholder="gsk_…"
+              value={device.groqKey || ''}
+              getUrl="https://console.groq.com/keys"
+              getLabel={L('Get a free key from Groq', 'احصل على مفتاح مجاني من Groq')}
+              onSave={(groqKey) => setDevice({ ...device, groqKey })}
+            />
             <button className="btn-primary w-full" onClick={testAi} disabled={testing}>
               {testing ? L('Testing…', 'جارٍ الاختبار…') : L('Test the AI', 'اختبر الذكاء الاصطناعي')}
             </button>
@@ -295,6 +434,12 @@ export default function Settings() {
               </>
             )}
           </div>
+        </Section>
+      )}
+
+      {isNative && (
+        <Section title={L('Security', 'الأمان')}>
+          <Security />
         </Section>
       )}
 

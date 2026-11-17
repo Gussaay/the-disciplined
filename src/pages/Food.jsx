@@ -82,6 +82,7 @@ export default function Food() {
 
   return (
     <Page
+      goal="food"
       action={
         <Link to="/food/database" className="btn-soft !min-h-[40px] !px-3 text-sm">
           <Database size={16} /> {L('Foods', 'الأغذية')}

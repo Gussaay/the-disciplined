@@ -1,8 +1,9 @@
 // Sign in and registration. Shown when the app opens without an account; the
 // person can also carry on without one and sign in later from Settings.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, Fingerprint, LogIn, UserPlus } from 'lucide-react';
+import { biometricAvailable, hasSavedLogin, saveLogin, savedLogin } from '../lib/biometric';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { authMessage, canGoogle, resetPassword, signIn, signInGoogle, signUp, useAuth } from '../hooks/useAuth';
@@ -36,6 +37,14 @@ export default function SignIn() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [bio, setBio] = useState({ available: false, saved: false });
+  const [remember, setRemember] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    Promise.all([biometricAvailable(), hasSavedLogin()]).then(([available, saved]) => live && setBio({ available, saved }));
+    return () => { live = false; };
+  }, []);
 
   if (!cloudEnabled) return <Navigate to="/" replace />;
   if (loading) return <Spinner />;
@@ -56,6 +65,22 @@ export default function SignIn() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const withFingerprint = () =>
+    run(async () => {
+      const login = await savedLogin(
+        L('Sign in to The Disciplined', 'تسجيل الدخول إلى الملتزم'),
+        L('Sign in with fingerprint', 'الدخول بالبصمة'),
+      );
+      return signIn(login.username, login.password);
+    }, finish);
+
+  const emailSignIn = async () => {
+    const u = registering ? await signUp(email, password, name) : await signIn(email, password);
+    // Kept in the phone's keystore, readable only after a fingerprint.
+    if (u && bio.available && remember) await saveLogin(email.trim(), password).catch(() => {});
+    return u;
   };
 
   const finish = (u) => {
@@ -79,6 +104,12 @@ export default function SignIn() {
           {L('Your training, food, prayer, people and English, backed up and on all your devices.', 'تمرينك وغذاؤك وصلاتك وصلتك ولغتك، محفوظة احتياطياً وعلى كل أجهزتك.')}
         </p>
       </div>
+
+      {bio.available && bio.saved && (
+        <button className="btn-primary mt-6 w-full !min-h-[56px] text-base" disabled={busy} onClick={withFingerprint}>
+          <Fingerprint size={22} /> {L('Sign in with fingerprint', 'الدخول بالبصمة')}
+        </button>
+      )}
 
       <div className="card mt-6 space-y-3">
         <Segmented
@@ -118,13 +149,19 @@ export default function SignIn() {
             <input className="input" dir="ltr" type={show ? 'text' : 'password'} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </Field>
         )}
+        {bio.available && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-5 w-5 accent-brand-700" checked={remember} onChange={() => setRemember(!remember)} />
+            <Fingerprint size={16} /> {L('Sign in with my fingerprint next time', 'الدخول ببصمتي في المرة القادمة')}
+          </label>
+        )}
         {mismatch && <p className="text-sm text-red-600">{L('The two passwords are different', 'كلمتا المرور مختلفتان')}</p>}
         {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300" role="alert">{error}</p>}
 
         <button
           className="btn-primary w-full"
           disabled={busy || !ready}
-          onClick={() => run(() => (registering ? signUp(email, password, name) : signIn(email, password)), finish)}
+          onClick={() => run(emailSignIn, finish)}
         >
           {registering ? <UserPlus size={18} /> : <LogIn size={18} />}
           {busy ? L('Please wait…', 'لحظة من فضلك…') : registering ? L('Create my account', 'أنشئ حسابي') : L('Sign in', 'تسجيل الدخول')}

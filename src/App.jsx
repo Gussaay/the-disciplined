@@ -5,6 +5,7 @@ import { useTheme } from './hooks/useTheme';
 import { isNative } from './lib/native';
 import { Spinner } from './components/ui';
 import BottomNav from './components/BottomNav';
+import AppLock from './components/AppLock';
 import Home from './pages/Home';
 import { useReminders } from './hooks/useReminders';
 import { useAuth } from './hooks/useAuth';
@@ -87,6 +88,7 @@ export default function App() {
         </Routes>
       </Suspense>
       {!hideNav && <BottomNav />}
+      <AppLock />
     </>
   );
 }
