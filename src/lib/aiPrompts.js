@@ -55,15 +55,21 @@ export function readEquipment(json) {
 }
 
 const FOOD_SHAPE =
-  '{"items": [{"name": "<food>", "grams": <number>, "kcal": <number>, "protein": <g>, "carbs": <g>, "fat": <g>, "sugar": <g>, "fiber": <g>}], "note": "<one short remark, e.g. what was assumed>"}';
+  '{"items": [{"name": "<food>", "search": "<the same food in plain English as a nutrition table would name it, e.g. egg whole hard-boiled>", "grams": <number>, "kcal": <number>, "protein": <g>, "carbs": <g>, "fat": <g>, "sugar": <g>, "fiber": <g>}], "note": "<one short remark, e.g. what was assumed>"}';
 
-export function foodPhotoPrompt(lang, hint) {
+const knownLine = (known) =>
+  known?.length
+    ? `Foods this person often eats (when one of them is what you see, use exactly that name): ${known.slice(0, 40).join('; ')}.`
+    : '';
+
+export function foodPhotoPrompt(lang, hint, known) {
   return {
     system:
       'You are a dietitian who estimates food portions and nutrients from photos. You know Sudanese, Gulf and Middle Eastern dishes well. Answer with JSON only.',
     prompt: [
       'List every food and drink visible in this photo with your best estimate of the portion in grams and its nutrients for that portion.',
       hint ? `The person adds: "${hint}".` : '',
+      knownLine(known),
       `Write the food names and the note in ${langName(lang)}.`,
       `Reply as JSON: ${FOOD_SHAPE}`,
       'If the photo shows no food, reply {"items": []}.',
@@ -71,16 +77,17 @@ export function foodPhotoPrompt(lang, hint) {
   };
 }
 
-export function foodTextPrompt(text, lang) {
+export function foodTextPrompt(text, lang, known) {
   return {
     system:
       'You are a dietitian. You estimate nutrients of meals described in words. You know Sudanese, Gulf and Middle Eastern dishes well. Answer with JSON only.',
     prompt: [
       `The person ate: "${text}".`,
       'Split it into foods, estimate each portion in grams (use a typical serving when no amount is given) and its nutrients for that portion.',
+      knownLine(known),
       `Write the food names and the note in ${langName(lang)}.`,
       `Reply as JSON: ${FOOD_SHAPE}`,
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
   };
 }
 
@@ -90,6 +97,7 @@ export function readFoods(json) {
     .slice(0, 20)
     .map((x) => ({
       name: String(x.name),
+      search: x.search ? String(x.search).slice(0, 80) : '',
       grams: num(x.grams),
       kcal: Math.round(num(x.kcal ?? x.calories)),
       protein: num(x.protein),

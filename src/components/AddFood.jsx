@@ -1,19 +1,23 @@
 // Adding food to a meal, four ways: from the list, from a photo, from a
 // description in words, or by typing the numbers from a label.
-import { useMemo, useState } from 'react';
-import { Check, Minus, Plus, Search, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, Database, History, ImageIcon, Minus, Plus, Search, Sparkles, Video } from 'lucide-react';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods';
-import { portion } from '../lib/nutrition';
-import { uid } from '../lib/dates';
+import { portion, totals } from '../lib/nutrition';
+import { dayKey, fromKey, uid } from '../lib/dates';
+import { logEntry, searchFoods } from '../lib/foodDb';
+import { foodKey, historySuggestions, knownNames, lastMeal, remember, rescale, tableMatch } from '../lib/foodHistory';
+import { LiveCamera, TableMatch } from './FoodTools';
 import { askAI, aiAvailable } from '../lib/ai';
 import { foodPhotoPrompt, foodTextPrompt, readFoods } from '../lib/aiPrompts';
 import { AiSetupNote, PhotoButton, useAiError } from './Ai';
 import { Field, NumberInput, Segmented, Sheet } from './ui';
-import { FromDatabase, MyMeals } from './FoodDatabase';
+import { FromDatabase, MyMeals, useFoodDb } from './FoodDatabase';
 
 const EMPTY = [];
+const NONE = {};
 
 export function MacroLine({ item }) {
   const { L } = useLang();
@@ -134,14 +138,109 @@ function FromList({ onAdd }) {
   );
 }
 
+/** What the person usually eats at this meal, one tap each. */
+function ForYou({ meal, onAdd, current }) {
+  const { L, pick, date } = useLang();
+  const [log] = useStore('foodLog', NONE);
+  const [added, setAdded] = useState({});
+  const today = dayKey();
+  const list = useMemo(() => historySuggestions(log, meal, { today, skip: current }), [log, meal, today, current]);
+  const last = useMemo(() => lastMeal(log, meal, today), [log, meal, today]);
+  if (!list.length && !last) {
+    return (
+      <p className="card muted text-center text-sm">
+        {L(
+          'Nothing to suggest yet. As you log food, the things you eat most at this meal show up here for one-tap adding.',
+          'لا توجد اقتراحات بعد. كلما سجّلت طعامك ستظهر هنا الأصناف التي تأكلها كثيراً في هذه الوجبة لإضافتها بضغطة.',
+        )}
+      </p>
+    );
+  }
+  const clean = (e, source) => {
+    const { id, meal: _m, ...rest } = e;
+    return { ...rest, source };
+  };
+  const lastSum = last ? totals(last.items) : null;
+  return (
+    <div className="space-y-3">
+      {last && (
+        <div className="card space-y-2">
+          <div className="flex items-center gap-2">
+            <History size={18} className="shrink-0" style={{ color: 'var(--accent, #1D6059)' }} />
+            <p className="min-w-0 flex-1 font-bold">
+              {L('Same as last time', 'مثل آخر مرة')}
+              <span className="muted text-sm font-normal"> · {date(fromKey(last.day), { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+            </p>
+          </div>
+          <p className="text-sm">{last.items.map((i) => `${pick(i.name)} ${Math.round(i.grams)} ${L('g', 'جم')}`).join(L(', ', '، '))}</p>
+          <MacroLine item={lastSum} />
+          <button className="btn-soft w-full" disabled={added.__last} onClick={() => { onAdd(last.items.map((e) => clean(e, 'history'))); setAdded({ ...added, __last: true }); }}>
+            {added.__last ? <Check size={16} /> : <Plus size={16} />} {added.__last ? L('Added', 'أضيفت') : L('Add all of it', 'أضفها كلها')}
+          </button>
+        </div>
+      )}
+      {list.length > 0 && (
+        <>
+          <p className="eyebrow px-1">{L('You often have', 'تتناول عادةً')}</p>
+          <div className="card divide-y divide-brand-900/10 !py-0 dark:divide-white/10">
+            {list.map(({ entry, times }) => {
+              const key = foodKey(entry);
+              return (
+                <div key={key} className="flex items-center gap-2 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {pick(entry.name)} <span className="muted tabular text-sm font-normal">· {Math.round(entry.grams)} {L('g', 'جم')}</span>
+                    </p>
+                    <span className="muted text-xs">{L(`${times}× in your log`, `${times} مرات في سجلك`)} · </span>
+                    <MacroLine item={entry} />
+                  </div>
+                  <button
+                    className={`${added[key] ? 'btn-soft' : 'btn-primary'} !min-h-[40px] !px-3`}
+                    aria-label={L('Add', 'إضافة')}
+                    disabled={added[key]}
+                    onClick={() => { onAdd([clean(entry, 'history')]); setAdded({ ...added, [key]: true }); }}
+                  >
+                    {added[key] ? <Check size={18} /> : <Plus size={18} />}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="muted px-1 text-xs">{L('From your last weeks of logging, with the amount you usually take. Tap a food on the main screen later to change it.', 'من سجلك في الأسابيع الماضية بالكمية المعتادة. اضغط على أي صنف في الشاشة الرئيسية لتعديله لاحقاً.')}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function FromAi({ mode, onAdd }) {
-  const { L, lang } = useLang();
+  const { L, pick, lang } = useLang();
   const aiError = useAiError();
+  const [log] = useStore('foodLog', NONE);
+  const [memory, setMemory] = useStore('foodMemory', NONE);
+  const { db } = useFoodDb();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [off, setOff] = useState({});
+  const [table, setTable] = useState({});
+  const [picking, setPicking] = useState(null);
   const [preview, setPreview] = useState('');
+  const [live, setLive] = useState(false);
+  const known = useMemo(() => knownNames(log, memory), [log, memory]);
+
+  // Each recognised food is linked to the nutrition table: the food it was
+  // linked to before (saved memory), else the closest table name.
+  useEffect(() => {
+    if (!result || !db) return;
+    const next = {};
+    result.items.forEach((item, i) => {
+      const m = tableMatch(db, item, memory, searchFoods);
+      if (m) next[i] = { food: m.food, remembered: m.remembered };
+    });
+    setTable(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result?.at, db]);
 
   const run = async (request, source) => {
     if (!aiAvailable()) {
@@ -151,14 +250,27 @@ function FromAi({ mode, onAdd }) {
     setBusy(true);
     setResult(null);
     setOff({});
+    setTable({});
+    setPicking(null);
     try {
       const answer = readFoods(await askAI({ ...request, json: true }));
-      setResult({ ...answer, source });
+      setResult({ ...answer, source, at: Date.now() });
     } catch (error) {
       aiError(error);
     } finally {
       setBusy(false);
     }
+  };
+  const fromPhoto = (photo) => {
+    setLive(false);
+    setPreview(photo.dataUrl);
+    return run({ ...foodPhotoPrompt(lang, text.trim(), known), image: photo }, 'photo');
+  };
+
+  const finalItem = (item, i) => {
+    const t = table[i];
+    if (!t) return { ...item, source: result.source };
+    return { ...logEntry(t.food, item.grams || 100), aiName: item.name, source: result.source };
   };
 
   return (
@@ -168,22 +280,26 @@ function FromAi({ mode, onAdd }) {
         <>
           <p className="text-sm">
             {L(
-              'Take a photo of your plate. The AI lists what it sees with an estimate of the amounts; you can correct the grams before adding.',
-              'التقط صورة لطبقك. يسرد الذكاء الاصطناعي ما يراه مع تقدير للكميات، ويمكنك تصحيح الجرامات قبل الإضافة.',
+              'Photograph your plate. The AI lists what it sees with the amounts, then each food is matched to the nutrition table and to the foods you logged before. Correct anything before adding.',
+              'صوّر طبقك. يسرد الذكاء الاصطناعي ما يراه بالكميات، ثم يُطابَق كل صنف مع جدول التغذية ومع الأطعمة التي سجلتها من قبل. صحّح أي شيء قبل الإضافة.',
             )}
           </p>
           <input className="input" placeholder={L('Optional note, e.g. “cooked with ghee”', 'ملاحظة اختيارية، مثل «مطبوخ بالسمن»')} value={text} onChange={(e) => setText(e.target.value)} />
-          {preview && <img src={preview} alt="" className="max-h-56 w-full rounded-2xl object-cover" />}
-          <PhotoButton
-            className="btn-primary w-full"
-            busy={busy}
-            onPhoto={(photo) => {
-              setPreview(photo.dataUrl);
-              return run({ ...foodPhotoPrompt(lang, text.trim()), image: photo }, 'photo');
-            }}
-          >
-            {busy ? L('Looking at your plate…', 'جارٍ تحليل طبقك…') : preview ? L('Take another photo', 'التقط صورة أخرى') : L('Take a photo', 'التقط صورة')}
-          </PhotoButton>
+          {live ? (
+            <LiveCamera onCapture={fromPhoto} onClose={() => setLive(false)} />
+          ) : (
+            <>
+              {preview && <img src={preview} alt="" className="max-h-56 w-full rounded-2xl object-cover" />}
+              <button className="btn-primary w-full" disabled={busy} onClick={() => setLive(true)}>
+                {busy ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Video size={18} />}
+                {busy ? L('Looking at your plate…', 'جارٍ تحليل طبقك…') : L('Live camera', 'الكاميرا المباشرة')}
+              </button>
+              <div className="flex gap-2">
+                <PhotoButton className="btn-soft flex-1" busy={busy} onPhoto={fromPhoto}>{L('Take a photo', 'التقط صورة')}</PhotoButton>
+                <PhotoButton className="btn-soft flex-1" busy={busy} gallery icon={<ImageIcon size={18} />} onPhoto={fromPhoto}>{L('From gallery', 'من المعرض')}</PhotoButton>
+              </div>
+            </>
+          )}
         </>
       ) : (
         <>
@@ -193,7 +309,7 @@ function FromAi({ mode, onAdd }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          <button className="btn-primary w-full" disabled={busy || !text.trim()} onClick={() => run(foodTextPrompt(text.trim(), lang), 'text')}>
+          <button className="btn-primary w-full" disabled={busy || !text.trim()} onClick={() => run(foodTextPrompt(text.trim(), lang, known), 'text')}>
             <Sparkles size={18} /> {busy ? L('Working it out…', 'جارٍ الحساب…') : L('Work out the nutrients', 'احسب القيم الغذائية')}
           </button>
         </>
@@ -203,46 +319,85 @@ function FromAi({ mode, onAdd }) {
         result.items.length ? (
           <>
             <div className="card divide-y divide-brand-900/10 !py-0 dark:divide-white/10">
-              {result.items.map((item, i) => (
-                <div key={i} className="flex items-center gap-3 py-3">
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5 shrink-0 accent-brand-700"
-                    checked={!off[i]}
-                    onChange={() => setOff({ ...off, [i]: !off[i] })}
-                    aria-label={item.name}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{item.name}</p>
-                    <MacroLine item={item} />
+              {result.items.map((item, i) => {
+                const t = table[i];
+                const shown = finalItem(item, i);
+                return (
+                  <div key={i} className="space-y-2 py-3">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 shrink-0 accent-brand-700"
+                        checked={!off[i]}
+                        onChange={() => setOff({ ...off, [i]: !off[i] })}
+                        aria-label={item.name}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{item.name}</p>
+                        <MacroLine item={shown} />
+                      </div>
+                      <label className="flex shrink-0 items-center gap-1">
+                        <NumberInput
+                          className="!min-h-[40px] w-20 text-center"
+                          value={item.grams}
+                          aria-label={L('Grams', 'الجرامات')}
+                          onChange={(v) => {
+                            const grams = Number(v) || 0;
+                            if (grams) setResult({ ...result, items: result.items.map((x, j) => (j === i ? rescale(item, grams) : x)) });
+                          }}
+                        />
+                        <span className="muted text-sm">{L('g', 'جم')}</span>
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 ps-8 text-xs">
+                      {t ? (
+                        <>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 font-bold text-brand-800 dark:bg-white/10 dark:text-brand-100">
+                            <Database size={12} /> {t.remembered ? L('Your saved match', 'مطابقتك المحفوظة') : L('Nutrition table', 'جدول التغذية')}: {pick(t.food.name)}
+                          </span>
+                          <button className="font-bold underline" onClick={() => setPicking(picking === i ? null : i)}>{L('Change', 'تغيير')}</button>
+                          <button className="muted underline" onClick={() => setTable({ ...table, [i]: null })}>{L('Use AI estimate', 'استخدم تقدير الذكاء')}</button>
+                        </>
+                      ) : (
+                        <button className="font-bold underline" onClick={() => setPicking(picking === i ? null : i)}>
+                          {L('AI estimate · match to the nutrition table', 'تقدير الذكاء · طابقه مع جدول التغذية')}
+                        </button>
+                      )}
+                    </div>
+                    {picking === i && (
+                      <div className="ms-8 rounded-2xl bg-brand-50/60 p-3 dark:bg-white/5">
+                        <TableMatch
+                          name={item.search || item.name}
+                          grams={item.grams}
+                          current={t?.food.id}
+                          onPick={(food) => {
+                            setTable({ ...table, [i]: { food, remembered: true } });
+                            setMemory(remember(memory, item.name, food, item.grams));
+                            setPicking(null);
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <label className="flex shrink-0 items-center gap-1">
-                    <NumberInput
-                      className="!min-h-[40px] w-20 text-center"
-                      value={item.grams}
-                      aria-label={L('Grams', 'الجرامات')}
-                      onChange={(v) => {
-                        // Changing the grams rescales every nutrient of the item.
-                        const grams = Number(v) || 0;
-                        const f = item.grams ? grams / item.grams : 1;
-                        const scaled = { ...item, grams };
-                        for (const k of ['kcal', 'protein', 'carbs', 'fat', 'sugar', 'fiber']) {
-                          scaled[k] = k === 'kcal' ? Math.round(item[k] * f) : Math.round(item[k] * f * 10) / 10;
-                        }
-                        if (grams) setResult({ ...result, items: result.items.map((x, j) => (j === i ? scaled : x)) });
-                      }}
-                    />
-                    <span className="muted text-sm">{L('g', 'جم')}</span>
-                  </label>
-                </div>
-              ))}
+                );
+              })}
             </div>
             {result.note && <p className="muted text-sm">{result.note}</p>}
-            <p className="muted text-xs">{L('AI estimates can be off; adjust the grams if you know better.', 'تقديرات الذكاء الاصطناعي قد تخطئ، عدّل الجرامات إن كنت أدرى.')}</p>
+            <p className="muted text-xs">
+              {L(
+                'Amounts are the AI’s estimate; adjust the grams if you know better. Foods matched to the nutrition table use its exact values, vitamins and minerals included, and your matches are remembered for next time.',
+                'الكميات تقدير من الذكاء الاصطناعي، عدّل الجرامات إن كنت أدرى. الأصناف المطابقة لجدول التغذية تأخذ قيمه الدقيقة بما فيها الفيتامينات والمعادن، وتُحفظ مطابقاتك للمرة القادمة.',
+              )}
+            </p>
             <button
               className="btn-primary w-full"
               onClick={() => {
-                onAdd(result.items.filter((_, i) => !off[i]).map((item) => ({ ...item, source: result.source })));
+                let mem = memory;
+                result.items.forEach((item, i) => {
+                  if (!off[i] && table[i]) mem = remember(mem, item.name, table[i].food, item.grams);
+                });
+                if (mem !== memory) setMemory(mem);
+                onAdd(result.items.map(finalItem).filter((_, i) => !off[i]));
                 setResult(null);
                 setText('');
                 setPreview('');
@@ -308,29 +463,37 @@ function FromLabel({ onAdd }) {
   );
 }
 
-export default function AddFood({ open, onClose, onAdd, title }) {
+export default function AddFood({ open, onClose, onAdd, title, meal, current }) {
   const { L } = useLang();
-  const [tab, setTab] = useState('list');
+  const [log] = useStore('foodLog', NONE);
+  const hasHistory = Object.keys(log).some((k) => (log[k] || []).length);
+  const [tab, setTab] = useState(null);
+  const shown = tab || (hasHistory && meal ? 'you' : 'list');
+  useEffect(() => {
+    if (!open) setTab(null);
+  }, [open]);
   return (
     <Sheet open={open} onClose={onClose} title={title}>
       <Segmented
-        value={tab}
+        value={shown}
         onChange={setTab}
         options={[
+          ...(meal ? [{ value: 'you', label: L('For you', 'لك'), icon: '⭐' }] : []),
+          { value: 'photo', label: L('Photo', 'صورة'), icon: '📷' },
           { value: 'list', label: L('Quick list', 'القائمة السريعة'), icon: '📋' },
           { value: 'db', label: L('Database', 'قاعدة الأغذية'), icon: '🔎' },
           { value: 'meals', label: L('My meals', 'وجباتي'), icon: '🍱' },
-          { value: 'photo', label: L('Photo', 'صورة'), icon: '📷' },
           { value: 'text', label: L('Describe', 'وصف'), icon: '✍️' },
           { value: 'label', label: L('Label', 'ملصق'), icon: '🏷️' },
         ]}
       />
-      {tab === 'list' && <FromList onAdd={onAdd} />}
-      {tab === 'db' && <FromDatabase onAdd={onAdd} />}
-      {tab === 'meals' && <MyMeals onAdd={onAdd} />}
-      {tab === 'photo' && <FromAi key="photo" mode="photo" onAdd={onAdd} />}
-      {tab === 'text' && <FromAi key="text" mode="text" onAdd={onAdd} />}
-      {tab === 'label' && <FromLabel onAdd={onAdd} />}
+      {shown === 'you' && <ForYou meal={meal} onAdd={onAdd} current={current || EMPTY} />}
+      {shown === 'list' && <FromList onAdd={onAdd} />}
+      {shown === 'db' && <FromDatabase onAdd={onAdd} />}
+      {shown === 'meals' && <MyMeals onAdd={onAdd} />}
+      {shown === 'photo' && <FromAi key="photo" mode="photo" onAdd={onAdd} />}
+      {shown === 'text' && <FromAi key="text" mode="text" onAdd={onAdd} />}
+      {shown === 'label' && <FromLabel onAdd={onAdd} />}
     </Sheet>
   );
 }

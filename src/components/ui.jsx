@@ -249,9 +249,21 @@ export function ToastProvider({ children }) {
     setToast({ message, kind });
     timer.current = setTimeout(() => setToast(null), 3200);
   }, []);
+  const [ask, setAsk] = useState(null);
+  const confirm = useCallback(
+    (options) => new Promise((resolve) => setAsk({ ...(typeof options === 'string' ? { title: options } : options), resolve })),
+    [],
+  );
+  const answer = (yes) => {
+    ask?.resolve(yes);
+    setAsk(null);
+  };
   return (
     <ToastContext.Provider value={show}>
+      <ConfirmContext.Provider value={confirm}>
       {children}
+      {ask && <ConfirmDialog ask={ask} onAnswer={answer} />}
+      </ConfirmContext.Provider>
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4" role="status" aria-live="polite">
           <div className={`animate-rise rounded-full px-4 py-2.5 text-sm font-bold text-white shadow-lg ${toast.kind === 'error' ? 'bg-red-600' : 'bg-brand-900'}`}>
@@ -264,3 +276,33 @@ export function ToastProvider({ children }) {
 }
 
 export const useToast = () => useContext(ToastContext);
+
+// --- Confirm ---------------------------------------------------------------
+const ConfirmContext = createContext(async () => true);
+
+/** `await confirm({ title, body, yes })` is true only when the person agrees. */
+export const useConfirm = () => useContext(ConfirmContext);
+
+function ConfirmDialog({ ask, onAnswer }) {
+  const { L } = useLang();
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onAnswer(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onAnswer]);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-6" role="alertdialog" aria-modal="true" aria-label={ask.title}>
+      <button className="absolute inset-0 bg-black/50" aria-label={L('Cancel', 'إلغاء')} onClick={() => onAnswer(false)} />
+      <div className="relative w-full max-w-sm animate-rise rounded-3xl bg-paper p-5 shadow-2xl dark:bg-[#0F1B1A]">
+        <p className="text-lg font-extrabold">{ask.title}</p>
+        {ask.body && <p className="muted mt-1 text-sm">{ask.body}</p>}
+        <div className="mt-5 flex gap-2">
+          <button className="btn-soft flex-1" onClick={() => onAnswer(false)} autoFocus>{L('Cancel', 'إلغاء')}</button>
+          <button className={`btn flex-1 text-white ${ask.danger === false ? 'bg-brand-800' : 'bg-red-600 hover:bg-red-700'}`} onClick={() => onAnswer(true)}>
+            {ask.yes || L('Delete', 'حذف')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

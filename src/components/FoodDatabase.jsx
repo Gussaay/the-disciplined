@@ -10,7 +10,7 @@ import {
   DAILY_VALUE, NUTRIENT_NAMES, UNIT_NAMES, loadFoodDb, logEntry, mealTotals, nutrientsFor, searchFoods,
 } from '../lib/foodDb';
 import { uid } from '../lib/dates';
-import { Field, NumberInput, Spinner } from './ui';
+import { Field, NumberInput, Spinner, useConfirm } from './ui';
 
 const EMPTY = [];
 
@@ -210,6 +210,7 @@ export function FromDatabase({ onAdd, addLabel }) {
 export function MyMeals({ onAdd }) {
   const { L, pick } = useLang();
   const [meals, setMeals] = useStore('foodMeals', EMPTY);
+  const confirm = useConfirm();
   if (!meals.length) {
     return (
       <p className="card muted text-center text-sm">
@@ -234,7 +235,11 @@ export function MyMeals({ onAdd }) {
               <button
                 className="muted flex h-10 w-10 shrink-0 items-center justify-center"
                 aria-label={L('Delete meal', 'حذف الوجبة')}
-                onClick={() => setMeals(meals.filter((m) => m.id !== meal.id))}
+                onClick={async () => {
+                  if (await confirm({ title: L(`Delete “${meal.name}”?`, `حذف «${meal.name}»؟`), body: L('The saved meal is removed. Food already logged stays.', 'تُحذف الوجبة المحفوظة، ويبقى ما سجلته من طعام.') })) {
+                    setMeals(meals.filter((m) => m.id !== meal.id));
+                  }
+                }}
               >
                 <Trash2 size={18} />
               </button>

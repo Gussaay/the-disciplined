@@ -12,15 +12,16 @@ test('JSON is found bare, fenced, or inside prose', () => {
 test('food answers are cleaned: numbers from text, alternate field names, junk rows dropped', () => {
   const { items, note } = readFoods({
     items: [
-      { name: 'Rice', grams: '180 g', calories: '234', protein: '4.9g', carbs: 50, fat: 0.5 },
+      { name: 'Rice', search: 'rice white cooked', grams: '180 g', calories: '234', protein: '4.9g', carbs: 50, fat: 0.5 },
       { grams: 50 },
       { name: 'Tea', grams: 250, kcal: 'abc' },
     ],
     note: 'assumed white rice',
   });
   assert.equal(items.length, 2);
-  assert.deepEqual(items[0], { name: 'Rice', grams: 180, kcal: 234, protein: 4.9, carbs: 50, fat: 0.5, sugar: 0, fiber: 0 });
+  assert.deepEqual(items[0], { name: 'Rice', search: 'rice white cooked', grams: 180, kcal: 234, protein: 4.9, carbs: 50, fat: 0.5, sugar: 0, fiber: 0 });
   assert.equal(items[1].kcal, 0);
+  assert.equal(items[1].search, '');
   assert.equal(note, 'assumed white rice');
   assert.deepEqual(readFoods(null).items, []);
 });
