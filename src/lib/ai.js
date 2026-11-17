@@ -52,12 +52,13 @@ async function groq(key, request) {
   return text;
 }
 
-function toContents({ prompt, image, messages }) {
+function toContents({ prompt, image, audio, messages }) {
   if (messages) {
     return messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.text }] }));
   }
   const parts = [{ text: prompt }];
   if (image) parts.push({ inlineData: { mimeType: image.mimeType, data: image.base64 } });
+  if (audio) parts.push({ inlineData: { mimeType: audio.mimeType, data: audio.base64 } });
   return [{ role: 'user', parts }];
 }
 
@@ -132,4 +133,44 @@ export async function askAI(request) {
     throw new AiSetupError();
   }
   return request.json ? parseJson(text) : text;
+}
+
+/**
+ * Words from a voice recording ({ blob, base64, mimeType }). Groq's Whisper
+ * when there is a Groq key, otherwise Gemini listens to the audio itself.
+ */
+export async function transcribe(audio, lang) {
+  const backup = groqKey();
+  if (backup) {
+    const form = new FormData();
+    const ext = /mp4|m4a|aac/.test(audio.mimeType) ? 'm4a' : /ogg/.test(audio.mimeType) ? 'ogg' : 'webm';
+    form.append('file', audio.blob, `voice.${ext}`);
+    form.append('model', 'whisper-large-v3-turbo');
+    if (lang) form.append('language', lang);
+    let res;
+    try {
+      res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${backup}` },
+        body: form,
+      });
+    } catch {
+      throw new Error('No connection to the AI service');
+    }
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.text?.trim()) return data.text.trim();
+    } else if (!ownKey()) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail?.error?.message || `AI error ${res.status}`);
+    }
+  }
+  const key = ownKey();
+  if (!key) throw new AiSetupError();
+  const text = await direct(key, {
+    system: 'You transcribe voice notes exactly, in the language spoken (often Arabic or English). Reply with the words only.',
+    prompt: 'Transcribe this voice note.',
+    audio,
+  });
+  return text.trim();
 }

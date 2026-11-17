@@ -143,6 +143,17 @@ signing in later from Settings adopts what was recorded.
 
 Until then the Google button shows on the website only.
 
+## Tasks
+
+One list for the app's own goals of the day (the five prayers, training,
+logging meals, English practice, people due a call, the weekly weigh-in), which
+tick themselves, and your own tasks. Add a task by typing, by voice (recorded,
+transcribed by Groq Whisper or Gemini) or from a photo; "Tidy with AI" turns
+it into clean tasks with date, time, priority, category and steps. Calendar
+events of the next two weeks come in from a Google Calendar secret iCal
+address (Android app) or an .ics file. Any task can be sent over WhatsApp,
+and tasks with a time can remind you on the phone.
+
 ## Weight and body (Bluetooth scale)
 
 The Weight page reads OKOK / Chipsea body-fat scales straight from their
