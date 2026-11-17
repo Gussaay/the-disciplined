@@ -513,14 +513,20 @@ function ScaleList({ onFind }) {
  * the app makes of it, and lets the person save a scale, teach the app an
  * unknown one, or copy a capture to send for support.
  */
+const LIKELY_NAME = /scale|adv|chipsea|okok|qn|yolanda|fit|body|weigh|icomon|hx|ble/i;
+
+/** How many different payloads a device sent in the last `ms`: a scale someone stands on keeps changing. */
+const changes = (lines = [], ms = 15000) => new Set(lines.filter((l) => Date.now() - l.at < ms).map((l) => l.line)).size;
+
 function Finder({ onClose }) {
   const { L, num } = useLang();
   const toast = useToast();
   const [scales, setScales] = useStore('scales', EMPTY);
   const [devices, setDevices] = useState({});
   const [error, setError] = useState('');
-  const [teach, setTeach] = useState(null);
-  const [known, setKnown] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [teach, setTeach] = useState(null); // { id, step: 1 | 2 | 3, known, cfg }
   const capture = useRef({});
 
   useEffect(() => {
@@ -538,8 +544,8 @@ function Finder({ onClose }) {
       const lines = capture.current[ad.id] || (capture.current[ad.id] = []);
       const line = Object.entries(ad.mfr).map(([k, v]) => `${companyHex(k)}: ${hex(v)}`).join(' | ');
       if (lines.at(-1)?.line !== line) lines.push({ at: Date.now(), line, mfr: ad.mfr });
-      if (lines.length > 60) lines.shift();
-      pending[ad.id] = { ...ad, parsed, seen: Date.now(), count: (devices[ad.id]?.count || 0) + 1 };
+      if (lines.length > 80) lines.shift();
+      pending[ad.id] = { ...ad, parsed, seen: Date.now() };
     })
       .then((s) => {
         stop = s;
@@ -551,13 +557,21 @@ function Finder({ onClose }) {
       clearInterval(flush);
       stop?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const list = Object.values(devices)
-    .sort((a, b) => (b.parsed ? 1 : 0) - (a.parsed ? 1 : 0) || /scale|adv|chipsea|okok/i.test(b.name) - /scale|adv|chipsea|okok/i.test(a.name) || b.rssi - a.rssi)
-    .slice(0, 25);
   const saved = new Set(scales.map((s) => s.id));
+  const all = Object.values(devices).map((d) => {
+    const moving = changes(capture.current[d.id]);
+    const hasData = Object.keys(d.mfr || {}).length > 0;
+    const score = (d.parsed ? 100 : 0) + (saved.has(d.id) ? 80 : 0) + (LIKELY_NAME.test(d.name || '') ? 40 : 0) + Math.min(moving, 6) * 8 + (hasData ? 5 : -30) + d.rssi / 10;
+    return { ...d, moving, hasData, score, likely: d.parsed || saved.has(d.id) || LIKELY_NAME.test(d.name || '') || moving >= 3 };
+  });
+  const q = filter.trim().toLowerCase().replace(/[^0-9a-z]/g, '');
+  const shown = all
+    .filter((d) => (q ? `${d.name || ''}${d.id}`.toLowerCase().replace(/[^0-9a-z]/g, '').includes(q) : showAll || d.likely))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 30);
+  const hidden = all.length - all.filter((d) => d.likely).length;
 
   const copy = async (id) => {
     const d = devices[id];
@@ -570,37 +584,69 @@ function Finder({ onClose }) {
     }
   };
 
+  const keep = (d, extra) => {
+    const rest = scales.filter((s) => s.id !== d.id);
+    setScales([...rest, { id: d.id, name: d.name || L('Bluetooth scale', 'ميزان بلوتوث'), format: d.parsed?.format || null, added: Date.now(), ...extra }]);
+  };
+
+  const learn = (d) => {
+    const recent = (capture.current[d.id] || []).filter((l) => Date.now() - l.at < 30000).map((l) => l.mfr);
+    const cfg = learnFormat(recent, Number(teach.known));
+    if (!cfg) {
+      toast(L('That number is not in what the scale sends. Check the number, or copy the capture and send it to Claude.', 'هذا الرقم غير موجود فيما يرسله الميزان. تأكد من الرقم، أو انسخ الالتقاط وأرسله إلى Claude.'), 'error');
+      return;
+    }
+    setTeach({ ...teach, step: 3, cfg });
+  };
+
+  const latest = (id) => capture.current[id]?.at(-1)?.mfr;
+
   return (
     <Sheet open onClose={onClose} title={L('Find my scale', 'ابحث عن ميزاني')}>
-      <p className="muted text-sm">
-        {L('Step on the scale so it wakes up. Devices the phone hears appear below; a recognised scale shows its weight.', 'قف على الميزان ليستيقظ. تظهر أدناه الأجهزة التي يلتقطها الهاتف، والميزان المعروف يظهر وزنه.')}
-      </p>
+      <ol className="space-y-1 rounded-2xl bg-brand-50/60 p-3 text-sm dark:bg-white/5">
+        <li>1. {L('Step on the scale barefoot so its display lights up.', 'قف على الميزان حافيًا حتى تضيء شاشته.')}</li>
+        <li>2. {L('Your scale is the one marked "Changing" or showing a weight. Its address may also be on the label under the scale.', 'ميزانك هو المعلَّم بـ"يتغيّر" أو الذي يظهر وزنًا. قد يكون عنوانه أيضًا على الملصق أسفل الميزان.')}</li>
+        <li>3. {L('If it shows a weight, tap "This is my scale". If not, tap "Teach the weight".', 'إن ظهر الوزن فاضغط "هذا ميزاني"، وإلا فاضغط "علّمه الوزن".')}</li>
+      </ol>
+      <div className="flex items-center gap-2">
+        <input
+          className="input flex-1"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder={L('Filter by name or address (e.g. last 4 digits)', 'صفِّ بالاسم أو العنوان (مثل آخر 4 خانات)')}
+          aria-label={L('Filter devices', 'تصفية الأجهزة')}
+        />
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {!list.length && !error && <p className="muted py-6 text-center text-sm">{L('Listening…', 'جارٍ الاستماع…')}</p>}
-      {list.map((d) => (
-        <div key={d.id} className="card space-y-2 !p-3">
+      {!shown.length && !error && (
+        <p className="muted py-6 text-center text-sm">{all.length ? L('No likely scale yet. Keep standing on it, or show all devices.', 'لا ميزان محتمل بعد. ابقَ واقفًا عليه، أو اعرض كل الأجهزة.') : L('Listening…', 'جارٍ الاستماع…')}</p>
+      )}
+      {shown.map((d) => (
+        <div key={d.id} className="card space-y-2 !p-3" style={d.parsed || d.moving >= 3 ? { boxShadow: `0 0 0 2px ${THEME.color}` } : undefined}>
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <p className="truncate font-bold">{d.name || L('(no name)', '(بلا اسم)')}</p>
-              <p className="muted tabular text-xs">{d.id} · {d.rssi} dBm</p>
+              <p className="muted tabular text-xs">{d.id} · {d.rssi} dBm{d.rssi > -60 ? L(' · very close', ' · قريب جدًا') : ''}</p>
             </div>
-            {d.parsed && (
+            {d.parsed ? (
               <span className="tabular rounded-full px-2 py-1 text-sm font-extrabold text-white" style={{ background: THEME.color }}>
                 {num(d.parsed.weight, 1)} {L('kg', 'كجم')}
               </span>
-            )}
+            ) : d.moving >= 3 ? (
+              <span className="rounded-full px-2 py-1 text-xs font-bold" style={{ background: `${THEME.color}22`, color: THEME.color }}>{L('Changing', 'يتغيّر')}</span>
+            ) : null}
           </div>
-          <p className="muted break-all font-mono text-[11px]">{Object.entries(d.mfr).map(([k, v]) => `${companyHex(k)}: ${hex(v)}`).join(' | ')}</p>
+          <p className="muted break-all font-mono text-[11px]">{Object.entries(d.mfr).map(([k, v]) => `${companyHex(k)}: ${hex(v)}`).join(' | ') || L('(sends no data)', '(لا يرسل بيانات)')}</p>
           <div className="flex flex-wrap gap-2">
             {saved.has(d.id) ? (
               <span className="text-sm font-bold" style={{ color: THEME.color }}>{L('Saved as my scale', 'محفوظ كميزاني')}</span>
-            ) : (
-              <button className="btn-soft !min-h-[36px] !px-3 text-sm" onClick={() => setScales([...scales, { id: d.id, name: d.name || L('Bluetooth scale', 'ميزان بلوتوث'), format: d.parsed?.format || null, added: Date.now() }])}>
+            ) : d.parsed ? (
+              <button className="btn-soft !min-h-[36px] !px-3 text-sm" onClick={() => keep(d)}>
                 <Plus size={14} /> {L('This is my scale', 'هذا ميزاني')}
               </button>
-            )}
-            {!d.parsed && (
-              <button className="btn-soft !min-h-[36px] !px-3 text-sm" onClick={() => { setTeach(d.id); setKnown(''); }}>
+            ) : null}
+            {!d.parsed && d.hasData && (
+              <button className="btn-soft !min-h-[36px] !px-3 text-sm" onClick={() => setTeach({ id: d.id, step: 1, known: '' })}>
                 <Scale size={14} /> {L('Teach the weight', 'علّمه الوزن')}
               </button>
             )}
@@ -608,34 +654,56 @@ function Finder({ onClose }) {
               <ClipboardCopy size={14} /> {L('Copy capture', 'انسخ الالتقاط')}
             </button>
           </div>
-          {teach === d.id && (
+          {teach?.id === d.id && (
             <div className="space-y-2 rounded-2xl bg-brand-50/60 p-3 dark:bg-white/5">
-              <p className="text-sm">{L('Stand on the scale and type the weight its display shows now.', 'قف على الميزان واكتب الوزن الذي تعرضه شاشته الآن.')}</p>
-              <div className="flex gap-2">
-                <NumberInput className="flex-1" value={known} onChange={setKnown} aria-label={L('Weight on the display', 'الوزن على الشاشة')} />
-                <button
-                  className="btn-primary"
-                  disabled={!(Number(known) > 2)}
-                  onClick={() => {
-                    const recent = (capture.current[d.id] || []).filter((l) => Date.now() - l.at < 20000).map((l) => l.mfr);
-                    const cfg = learnFormat(recent, Number(known));
-                    if (!cfg) {
-                      toast(L('That number is not in what the scale sends. Copy the capture and send it to Claude.', 'هذا الرقم غير موجود فيما يرسله الميزان. انسخ الالتقاط وأرسله إلى Claude.'), 'error');
-                      return;
-                    }
-                    const rest = scales.filter((s) => s.id !== d.id);
-                    setScales([...rest, { id: d.id, name: d.name || L('Bluetooth scale', 'ميزان بلوتوث'), format: 'learnt', learnt: cfg, added: Date.now() }]);
-                    setTeach(null);
-                    toast(L('Learnt. Weighing will read this scale from now on.', 'تم التعلّم. سيُقرأ هذا الميزان من الآن.'));
-                  }}
-                >
-                  {L('Learn', 'تعلّم')}
-                </button>
-              </div>
+              <p className="text-xs font-bold" style={{ color: THEME.color }}>{L(`Step ${teach.step} of 3`, `الخطوة ${teach.step} من 3`)}</p>
+              {teach.step === 1 && (
+                <>
+                  <p className="text-sm">{L('Stand still on the scale until the number on its display stops changing (it often blinks). Keep standing.', 'قف ثابتًا على الميزان حتى يتوقف الرقم على شاشته عن التغيّر (غالبًا يومض). ابقَ واقفًا.')}</p>
+                  <button className="btn-primary w-full" onClick={() => setTeach({ ...teach, step: 2 })}>{L('The number stopped', 'توقّف الرقم')}</button>
+                </>
+              )}
+              {teach.step === 2 && (
+                <>
+                  <p className="text-sm">{L('Type exactly the weight the display shows, then tap Learn (within 30 seconds).', 'اكتب الوزن كما تعرضه الشاشة تمامًا، ثم اضغط تعلّم (خلال 30 ثانية).')}</p>
+                  <div className="flex gap-2">
+                    <NumberInput className="flex-1" value={teach.known} onChange={(known) => setTeach({ ...teach, known })} aria-label={L('Weight on the display', 'الوزن على الشاشة')} />
+                    <button className="btn-primary" disabled={!(Number(teach.known) > 2)} onClick={() => learn(d)}>{L('Learn', 'تعلّم')}</button>
+                  </div>
+                </>
+              )}
+              {teach.step === 3 && (() => {
+                const live = parseLearnt(latest(d.id), teach.cfg);
+                return (
+                  <>
+                    <p className="text-sm">{L('Check: step off and on again. The app now reads:', 'تحقّق: انزل ثم اصعد مجددًا. التطبيق يقرأ الآن:')}</p>
+                    <p className="tabular text-center text-3xl font-extrabold" style={{ color: THEME.color }}>{live ? `${num(live.weight, 1)} ${L('kg', 'كجم')}` : '—'}</p>
+                    <p className="muted text-center text-xs">{L(`Found in ${teach.cfg.matches} readings`, `وُجد في ${teach.cfg.matches} قراءات`)}</p>
+                    <div className="flex gap-2">
+                      <button className="btn-ghost flex-1" onClick={() => setTeach({ ...teach, step: 1, cfg: null })}>{L('Wrong, try again', 'خطأ، أعد')}</button>
+                      <button
+                        className="btn-primary flex-1"
+                        onClick={() => {
+                          keep(d, { format: 'learnt', learnt: teach.cfg });
+                          setTeach(null);
+                          toast(L('Learnt. Weighing will read this scale from now on.', 'تم التعلّم. سيُقرأ هذا الميزان من الآن.'));
+                        }}
+                      >
+                        {L('Matches, save', 'مطابق، احفظ')}
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
       ))}
+      {!q && hidden > 0 && (
+        <button className="btn-ghost w-full text-sm" onClick={() => setShowAll(!showAll)}>
+          {showAll ? L('Show likely scales only', 'اعرض الموازين المحتملة فقط') : L(`Show all devices (${hidden} more)`, `اعرض كل الأجهزة (${hidden} أخرى)`)}
+        </button>
+      )}
     </Sheet>
   );
 }

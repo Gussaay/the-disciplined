@@ -138,7 +138,26 @@ function Tasks() {
   );
 }
 
-const ART = { gym: Gym, food: Food, prayer: Prayer, social: Social, english: English, weight: Weight, tasks: Tasks };
+function Watch() {
+  return (
+    <>
+      <circle cx="80" cy="50" r="40" fill={W3} />
+      {/* strap */}
+      <rect x="64" y="4" width="32" height="92" rx="10" fill="rgba(0,0,0,0.18)" />
+      {/* face */}
+      <rect x="52" y="22" width="56" height="58" rx="14" fill={W} />
+      <rect x="58" y="28" width="44" height="46" rx="10" fill="#1f2937" />
+      {/* heart line */}
+      <path d="M62 54h8l4-10 6 18 4-8h14" stroke={GOLD} strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <text x="80" y="42" textAnchor="middle" fontFamily="monospace" fontWeight="700" fontSize="8" fill="#fff">8,240</text>
+      <rect x="108" y="44" width="5" height="12" rx="2" fill={W} />
+      {/* bluetooth waves */}
+      <path d="M128 22a14 14 0 0 1 0 20M134 16a22 22 0 0 1 0 32" stroke={GOLD} strokeWidth="3" fill="none" strokeLinecap="round" />
+    </>
+  );
+}
+
+const ART = { gym: Gym, food: Food, prayer: Prayer, social: Social, english: English, weight: Weight, tasks: Tasks, watch: Watch };
 
 export default function Illustration({ goal, className = '' }) {
   const Art = ART[goal];
