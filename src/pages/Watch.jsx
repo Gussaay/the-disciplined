@@ -199,7 +199,10 @@ export default function Watch() {
                 </p>
               </div>
             </div>
-            {s?.protocol === 'fitpro' && (
+            {s && s.protocol !== 'heart-rate' && s.measureHint && busy === 'heart' && (
+              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('Now open the heart-rate screen on the watch and keep still. The reading appears here.', 'افتح الآن شاشة نبض القلب في الساعة وابقَ ثابتاً. ستظهر القراءة هنا.')}</p>
+            )}
+            {s && s.protocol !== 'heart-rate' && (
               <button
                 className="btn-primary w-full"
                 disabled={live.status !== 'connected' || busy === 'heart'}
@@ -215,12 +218,12 @@ export default function Watch() {
             <p className="muted text-xs">{L('Watch readings are for tracking, not for medical decisions.', 'قراءات الساعة للمتابعة وليست للتشخيص الطبي.')}</p>
           </div>
 
-          {s?.protocol === 'fitpro' && (
+          {s && s.protocol !== 'heart-rate' && (
             <div className="grid grid-cols-3 gap-2">
               <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected'} onClick={() => act('refresh', s.refresh, L('Updated', 'تم التحديث'))}>
                 <RefreshCw size={16} /> {L('Update', 'تحديث')}
               </button>
-              <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected'} onClick={() => act('find', s.findWatch, L('The watch is vibrating', 'الساعة تهتز'))}>
+              <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected' || !s.findWatch} onClick={() => act('find', s.findWatch, L('The watch is vibrating', 'الساعة تهتز'))}>
                 <Search size={16} /> {L('Find', 'ابحث')}
               </button>
               <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected'} onClick={() => act('time', s.syncTime, L('Time set', 'ضُبط الوقت'))}>
