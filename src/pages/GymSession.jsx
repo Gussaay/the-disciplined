@@ -14,6 +14,8 @@ import { estimateBurn, isRecord, lastPerformance, nextTarget, personalRecords, s
 import { addSet, finishSession, makeExercise, setComplete } from '../lib/gymSession';
 import { hrStats } from '../lib/hrParse';
 import { connectHeartRate, heartRateSupported } from '../lib/heartRate';
+import { watchSupported } from '../lib/watch';
+import { link as linkWatch, live as watchLive, onHeart, subscribe as watchSubscribe } from '../lib/watchLive';
 
 const NONE = {};
 const EMPTY = [];
@@ -90,6 +92,33 @@ export default function GymSession() {
   const records = useMemo(() => personalRecords(sessions), [sessions]);
 
   useEffect(() => () => link.current?.disconnect(), []);
+
+  // The linked watch: connect when the workout opens, keep its heart sensor
+  // measuring (a fresh measurement every minute) and collect the readings.
+  const [savedWatch] = useStore('watch', null);
+  const useMyWatch = Boolean(savedWatch?.id && watchSupported() && active);
+  const [watchState, setWatchState] = useState(watchLive.status);
+  useEffect(() => watchSubscribe(() => setWatchState(watchLive.status)), []);
+  useEffect(() => {
+    if (!useMyWatch) return undefined;
+    if (watchLive.status !== 'connected' && watchLive.status !== 'connecting') linkWatch(savedWatch, profile);
+    const off = onHeart((h) => {
+      setBpm(h.bpm);
+      hr.current = hrStats(hr.current, h.bpm);
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useMyWatch]);
+  useEffect(() => {
+    if (!useMyWatch || watchState !== 'connected') return undefined;
+    const measure = () => watchLive.session?.measureHeart?.().catch(() => {});
+    measure();
+    const t = setInterval(measure, 60000);
+    return () => {
+      clearInterval(t);
+      watchLive.session?.stopHeart?.().catch(() => {});
+    };
+  }, [useMyWatch, watchState]);
 
   // The rest is over: a short buzz, then the bar goes away.
   useEffect(() => {
@@ -197,7 +226,16 @@ export default function GymSession() {
             <p className="truncate text-sm text-white/80">{active.name}</p>
             <p className="tabular text-2xl font-extrabold leading-none">{clock(elapsed)}</p>
           </div>
-          {heartRateSupported() && (
+          {useMyWatch ? (
+            <button
+              onClick={() => (watchState === 'connected' ? watchLive.session?.measureHeart?.().catch(() => {}) : linkWatch(savedWatch, profile))}
+              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white/15 px-3 font-bold"
+              aria-label={L(`Heart rate from my watch ${bpm || ''}`, `النبض من ساعتي ${bpm || ''}`)}
+            >
+              <HeartPulse size={18} className={bpm ? 'animate-pulse' : ''} />
+              <span className="tabular">{watchState === 'connected' ? bpm || '…' : watchState === 'connecting' ? '…' : '⌚'}</span>
+            </button>
+          ) : heartRateSupported() && (
             <button
               onClick={watch ? undefined : connect}
               className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white/15 px-3 font-bold"
