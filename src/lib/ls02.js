@@ -30,11 +30,12 @@ export const ls02Cmd = {
   heartOn: () => [0x18, 0x01],
   heartOff: () => [0x18, 0x02],
   heartAll: () => [0x18, 0xfa],
-  user: ({ sex, age, height, weight, stepGoal = 8000 }) => {
+  // Profile and watch settings in one command: screen-on seconds, step goal, raise-to-wake.
+  user: ({ sex, age, height, weight, stepGoal = 8000 }, { screen = 10, wrist = true } = {}) => {
     const goal = Math.max(1000, Math.min(60000, Number(stepGoal) || 8000));
     return [
-      0x05, 0x00, Math.round(Number(height) || 170) & 0xff, 0x00, Math.round(Number(weight) || 70) & 0xff, 0x0a, 0x00, 0x00,
-      (goal >> 8) & 0xff, goal & 0xff, 0x01, 0xa0, 0x00, Math.round(Number(age) || 30) & 0xff, sex === 'female' ? 0x02 : 0x01, 0x00, 0x01, 0x01, 0x28,
+      0x05, 0x00, Math.round(Number(height) || 170) & 0xff, 0x00, Math.round(Number(weight) || 70) & 0xff, Math.max(3, Math.min(30, Number(screen) || 10)), 0x00, 0x00,
+      (goal >> 8) & 0xff, goal & 0xff, wrist ? 0x01 : 0x00, 0xa0, 0x00, Math.round(Number(age) || 30) & 0xff, sex === 'female' ? 0x02 : 0x01, 0x00, 0x01, 0x01, 0x28,
     ];
   },
 };
@@ -66,6 +67,12 @@ export function parseLs02(p, { now = new Date(), steps = new Map() } = {}) {
   if (id === 0xb2 && p.length >= 8) {
     if (sameDay(p, 1, now)) steps.set(p[5], u16(p, 6));
     return { type: 'stepsRow' };
+  }
+  // Seen from the GZCSW02 while walking: F7 03, date, hour, steps of that hour.
+  if (id === 0xf7 && p[1] === 0x03 && p.length >= 9) {
+    if (!sameDay(p, 2, now)) return { type: 'stepsRow' };
+    steps.set(p[6], u16(p, 7));
+    return { type: 'day', steps: [...steps.values()].reduce((a, b) => a + b, 0) };
   }
   if ((id === 0x09 || id === 0xb1) && p.length >= 8) return { type: 'stepsChanged' };
   if (id === 0xd1 && p[1] === 0x0a) return { type: 'findPhone' };

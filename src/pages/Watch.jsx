@@ -4,74 +4,19 @@ import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { Bars, Page, Section, useConfirm, useToast } from '../components/ui';
-import { connectWatch, pickWatch, watchSupported } from '../lib/watch';
+import { pickWatch, watchSupported } from '../lib/watch';
+import { link, live, subscribe } from '../lib/watchLive';
 import { dayKey, fromKey, lastDays } from '../lib/dates';
-import { read, write } from '../lib/store';
 
 const NONE = {};
 const THEME = goalById('watch');
-
-// One connection for the whole app, so leaving the page keeps the watch linked.
-const live = { status: 'idle', error: '', battery: null, heart: null, session: null, log: [] };
-const listeners = new Set();
-const emit = () => listeners.forEach((l) => l());
-const set = (patch) => {
-  Object.assign(live, patch);
-  live.version = (live.version || 0) + 1;
-  emit();
-};
-const subscribe = (l) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
-
-function saveDay(patch) {
-  const today = dayKey();
-  const log = read('watchLog') || {};
-  write('watchLog', { ...log, [today]: { ...(log[today] || {}), ...patch, updated: Date.now() } });
-}
-
-async function link(watch, profile) {
-  if (live.status === 'connecting' || live.status === 'connected') return;
-  set({ status: 'connecting', error: '' });
-  try {
-    const session = await connectWatch(watch, {
-      profile,
-      onEvent: (e) => {
-        if (e.type === 'log') {
-          live.log = [...live.log.slice(-80), `${new Date().toISOString().slice(11, 19)} ${e.dir === 'out' ? '→' : e.dir === 'info' ? '·' : '←'} ${e.hex}`];
-          return;
-        }
-        if (e.type === 'battery') set({ battery: e.level });
-        if (e.type === 'day') saveDay({ steps: e.steps, distance: e.distance, kcal: e.kcal });
-        if (e.type === 'heart' && e.bpm) {
-          set({ heart: { ...e, at: Date.now() } });
-          const today = dayKey();
-          const day = (read('watchLog') || {})[today] || {};
-          saveDay({
-            bpm: e.bpm,
-            bpmMin: Math.min(day.bpmMin || 999, e.bpm),
-            bpmMax: Math.max(day.bpmMax || 0, e.bpm),
-            ...(e.spo2 ? { spo2: e.spo2 } : {}),
-            ...(e.systolic && e.diastolic ? { systolic: e.systolic, diastolic: e.diastolic } : {}),
-          });
-        }
-        if (e.type === 'findPhone') navigator.vibrate?.([400, 200, 400]);
-      },
-      onEnd: () => set({ status: 'disconnected', session: null }),
-    });
-    set({ status: 'connected', session });
-    write('watch', { ...watch, protocol: session.protocol });
-  } catch (e) {
-    set({ status: 'error', error: e.message || String(e), session: null });
-  }
-}
 
 export default function Watch() {
   const { L, num, date, time } = useLang();
   const toast = useToast();
   const confirm = useConfirm();
-  const [profile] = useStore('profile', NONE);
+  const [profile, setProfile] = useStore('profile', NONE);
+  const [wset, setWset] = useStore('watchSettings', NONE);
   const [watch, setWatch] = useStore('watch', null);
   const [log] = useStore('watchLog', NONE);
   const [busy, setBusy] = useState('');
@@ -200,7 +145,7 @@ export default function Watch() {
               </div>
             </div>
             {s && s.protocol !== 'heart-rate' && s.measureHint && busy === 'heart' && (
-              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('Now open the heart-rate screen on the watch and keep still. The reading appears here.', 'افتح الآن شاشة نبض القلب في الساعة وابقَ ثابتاً. ستظهر القراءة هنا.')}</p>
+              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('The phone asked the watch to measure. Keep still. If nothing shows within 30 seconds, open the heart screen on the watch once, then send me the connection log.', 'طلب الهاتف من الساعة القياس. ابقَ ثابتاً. إن لم تظهر قراءة خلال 30 ثانية فافتح شاشة النبض في الساعة مرة، ثم أرسل لي سجل الاتصال.')}</p>
             )}
             {s && s.protocol !== 'heart-rate' && (
               <button
@@ -230,6 +175,36 @@ export default function Watch() {
                 <Clock size={16} /> {L('Set time', 'اضبط الوقت')}
               </button>
             </div>
+          )}
+
+          {s?.settings && (
+            <Section title={L('Watch settings', 'إعدادات الساعة')}>
+              <div className="card space-y-3">
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Daily step goal', 'هدف الخطوات اليومي')}</span>
+                  <select className="input !w-32" value={goal} onChange={(e) => setProfile({ ...profile, stepGoal: Number(e.target.value) })}>
+                    {[4000, 6000, 8000, 10000, 12000, 15000].map((g) => <option key={g} value={g}>{num(g)}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Screen stays on', 'مدة إضاءة الشاشة')}</span>
+                  <select className="input !w-32" value={wset.screen ?? 10} onChange={(e) => setWset({ ...wset, screen: Number(e.target.value) })}>
+                    {[5, 10, 15, 20, 30].map((v) => <option key={v} value={v}>{L(`${v} s`, `${v} ث`)}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Raise wrist to wake the screen', 'ارفع المعصم لإضاءة الشاشة')}</span>
+                  <input type="checkbox" className="h-5 w-5" checked={wset.wrist ?? true} onChange={(e) => setWset({ ...wset, wrist: e.target.checked })} />
+                </label>
+                <button
+                  className="btn-primary w-full"
+                  disabled={live.status !== 'connected' || busy === 'settings'}
+                  onClick={() => act('settings', () => s.applySettings({ stepGoal: goal, screen: wset.screen ?? 10, wrist: wset.wrist ?? true }), L('Sent to the watch', 'أُرسلت إلى الساعة'))}
+                >
+                  {L('Send to the watch', 'أرسل إلى الساعة')}
+                </button>
+              </div>
+            </Section>
           )}
 
           <Section title={L('Steps, last 7 days', 'الخطوات، آخر 7 أيام')}>
