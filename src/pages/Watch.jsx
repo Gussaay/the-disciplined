@@ -1,11 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { BatteryMedium, Bluetooth, ClipboardCopy, Clock, Footprints, HeartPulse, Link2, RefreshCw, Search, Unlink } from 'lucide-react';
+import { BatteryMedium, Bluetooth, CheckCircle2, ClipboardCopy, Clock, Dumbbell, Footprints, HeartPulse, Link2, MessageSquare, RefreshCw, Search, Unlink } from 'lucide-react';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { Bars, Page, Section, useConfirm, useToast } from '../components/ui';
 import { pickWatch, watchSupported } from '../lib/watch';
-import { link, live, subscribe } from '../lib/watchLive';
+import { link, live, resetLive, subscribe } from '../lib/watchLive';
+import { SPORTS } from '../lib/ls02';
 import { dayKey, fromKey, lastDays } from '../lib/dates';
 
 const NONE = {};
@@ -40,6 +41,11 @@ export default function Watch() {
   const week = lastDays(7, today).map((k) => ({ key: k, steps: log[k]?.steps || 0 }));
   const goal = Number(profile.stepGoal) || 8000;
   const s = live.session;
+  const workouts = lastDays(7, today).flatMap((k) => log[k]?.workouts || []).sort((a, b) => b.start - a.start).slice(0, 10);
+  const sportName = (kind) => {
+    const n = SPORTS[kind];
+    return n ? L(n[0], n[1]) : L('Workout', 'تمرين');
+  };
 
   const choose = async () => {
     try {
@@ -100,8 +106,13 @@ export default function Watch() {
             <div className="min-w-0 flex-1">
               <p className="font-bold">{statusText}</p>
               <p className="muted text-xs">
-                {watch.name}{live.battery != null ? ` · ${L('battery', 'البطارية')} ${live.battery}%` : ''}{s?.protocol === 'heart-rate' ? ` · ${L('heart rate only', 'نبض القلب فقط')}` : ''}
+                {watch.name}{live.battery != null ? ` · ${L('battery', 'البطارية')} ${live.battery}%` : ''}{s?.protocol === 'heart-rate' ? ` · ${L('heart rate only', 'نبض القلب فقط')}` : ''}{live.firmware ? ` · ${live.firmware}` : ''}
               </p>
+              {live.status === 'connected' && live.lastAck && (
+                <p className="flex items-center gap-1 text-xs" style={{ color: THEME.color }}>
+                  <CheckCircle2 size={12} /> {L(`The watch confirmed your last order at ${time(new Date(live.lastAck.at))}`, `أكدت الساعة استلام آخر أمر الساعة ${time(new Date(live.lastAck.at))}`)}
+                </p>
+              )}
             </div>
             {live.battery != null && <BatteryMedium className="muted" />}
             {live.status !== 'connected' && live.status !== 'connecting' && (
@@ -145,45 +156,39 @@ export default function Watch() {
                 </p>
               </div>
             </div>
-            {s?.learnHeart && !s.canStartHeart() && (
-              <div className="space-y-2 rounded-xl bg-brand-50 p-3 text-sm dark:bg-white/5">
-                <p>
-                  {learning
-                    ? L(`Trying start command ${learning[0]} of ${learning[1]}… keep the watch on your wrist and don't touch it.`, `تجربة أمر البدء ${learning[0]} من ${learning[1]}… أبقِ الساعة على معصمك ولا تلمسها.`)
-                    : L('Your watch needs its start command for heart rate. Let the app find it once (about a minute): watch on the wrist, heart screen closed.', 'ساعتك تحتاج أمر بدء قياس النبض. دع التطبيق يجده مرة واحدة (حوالي دقيقة): الساعة على المعصم وشاشة النبض مغلقة.')}
-                </p>
-                {!learning && (
-                  <button
-                    className="btn-soft w-full"
-                    disabled={live.status !== 'connected'}
-                    onClick={async () => {
-                      setLearning([0, 0]);
-                      try {
-                        const found = await s.learnHeart((i, n) => setLearning([i, n]));
-                        if (found) {
-                          setWset({ ...wset, heartCmd: found });
-                          toast(L('Found it. Measure now starts from the phone.', 'وُجد. القياس يبدأ الآن من الهاتف.'));
-                        } else {
-                          toast(L('No command worked. Copy the connection log and send it to Claude.', 'لم ينجح أي أمر. انسخ سجل الاتصال وأرسله إلى Claude.'), 'error');
-                        }
-                      } finally {
-                        setLearning(null);
-                      }
-                    }}
-                  >
-                    <HeartPulse size={16} /> {L('Find the start command', 'ابحث عن أمر البدء')}
-                  </button>
-                )}
-              </div>
+            {day.hr?.length > 1 && <Spark points={day.hr} color="#EF4444" />}
+            {learning && (
+              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">
+                {L(`Teaching the app your watch: trying start command ${learning[0]} of ${learning[1]}. Keep the watch on your wrist and don't touch it.`, `تعريف التطبيق بساعتك: تجربة أمر البدء ${learning[0]} من ${learning[1]}. أبقِ الساعة على معصمك ولا تلمسها.`)}
+              </p>
             )}
-            {s?.learnHeart && !s.canStartHeart() && busy === 'heart' && (
-              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('Open the heart screen on the watch; the reading appears here.', 'افتح شاشة النبض في الساعة؛ ستظهر القراءة هنا.')}</p>
+            {!learning && busy === 'heart' && s?.promptHeart && !s.canStartHeart() && (
+              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('The watch is buzzing: tap the heart on it. The reading shows here and is saved.', 'الساعة تهتز الآن: اضغط على القلب فيها. تظهر القراءة هنا وتُحفظ.')}</p>
             )}
             {s && s.protocol !== 'heart-rate' && (
               <button
                 className="btn-primary w-full"
                 disabled={live.status !== 'connected' || busy === 'heart'}
                 onClick={() => act('heart', async () => {
+                  // First time: find the watch's start command by trying each known one.
+                  if (s.learnHeart && !s.canStartHeart() && !wset.heartTried) {
+                    setLearning([0, 0]);
+                    try {
+                      const found = await s.learnHeart((i, n) => setLearning([i, n]));
+                      setWset({ ...wset, heartTried: true, ...(found ? { heartCmd: found } : {}) });
+                      if (found) {
+                        toast(L('Found it: the phone now starts the measurement.', 'وُجد الأمر: الهاتف يبدأ القياس الآن.'));
+                        return;
+                      }
+                    } finally {
+                      setLearning(null);
+                    }
+                  }
+                  if (s.promptHeart && !s.canStartHeart()) {
+                    await s.promptHeart();
+                    await new Promise((r) => setTimeout(r, 60000));
+                    return;
+                  }
                   await s.measureHeart();
                   await new Promise((r) => setTimeout(r, 45000));
                   await s.stopHeart();
@@ -192,11 +197,17 @@ export default function Watch() {
                 <HeartPulse size={18} /> {busy === 'heart' ? L('Measuring… keep the watch on', 'جارٍ القياس… أبقِ الساعة على معصمك') : L('Measure now', 'قِس الآن')}
               </button>
             )}
+            {s?.promptHeart && !s.canStartHeart() && wset.heartTried && (
+              <p className="muted text-xs">
+                {L('This watch does not take a start order for heart rate from any app: it measures by itself every 10 minutes (saved here), live while its heart screen is open, and during a workout started on the watch. Measure now makes it buzz so you only tap the heart.', 'هذه الساعة لا تقبل أمر بدء قياس النبض من أي تطبيق: تقيس تلقائياً كل 10 دقائق (تُحفظ هنا)، ومباشرة عند فتح شاشة النبض، وأثناء تمرين تبدؤه من الساعة. زر "قِس الآن" يجعلها تهتز لتضغط على القلب فقط.')}{' '}
+                <button className="underline" onClick={() => setWset({ ...wset, heartTried: false })}>{L('Try the start commands again', 'جرّب أوامر البدء مرة أخرى')}</button>
+              </p>
+            )}
             <p className="muted text-xs">{L('Watch readings are for tracking, not for medical decisions.', 'قراءات الساعة للمتابعة وليست للتشخيص الطبي.')}</p>
           </div>
 
           {s && s.protocol !== 'heart-rate' && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected'} onClick={() => act('refresh', s.refresh, L('Updated', 'تم التحديث'))}>
                 <RefreshCw size={16} /> {L('Update', 'تحديث')}
               </button>
@@ -206,7 +217,28 @@ export default function Watch() {
               <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected'} onClick={() => act('time', s.syncTime, L('Time set', 'ضُبط الوقت'))}>
                 <Clock size={16} /> {L('Set time', 'اضبط الوقت')}
               </button>
+              <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected' || !s.notify} onClick={() => act('msg', () => s.notify('Hello from The Disciplined'), L('Sent: check the watch screen', 'أُرسلت: انظر إلى شاشة الساعة'))}>
+                <MessageSquare size={16} /> {L('Test message', 'رسالة تجربة')}
+              </button>
             </div>
+          )}
+
+          {(live.sport || workouts.length > 0) && (
+            <Section title={L('Workouts on the watch', 'تمارين الساعة')}>
+              <div className="card space-y-2">
+                {live.sport && (
+                  <p className="flex items-center gap-2 text-sm font-bold" style={{ color: THEME.color }}>
+                    <Dumbbell size={16} className="animate-pulse" /> {L(`${sportName(live.sport.kind)} in progress`, `${sportName(live.sport.kind)} جارٍ الآن`)}{live.heart?.bpm ? ` · ${live.heart.bpm} ${L('bpm', 'نبضة/د')}` : ''}
+                  </p>
+                )}
+                {workouts.map((w) => (
+                  <div key={w.start} className="flex items-center justify-between gap-2 text-sm">
+                    <span><span className="font-bold">{sportName(w.kind)}</span> <span className="muted">{date(new Date(w.start), { weekday: 'short' })} {time(new Date(w.start))}</span></span>
+                    <span className="tabular">{L(`${Math.max(1, Math.round((w.end - w.start) / 60000))} min`, `${Math.max(1, Math.round((w.end - w.start) / 60000))} د`)}{w.bpmAvg ? ` · ♥ ${w.bpmAvg}/${w.bpmMax}` : ''}</span>
+                  </div>
+                ))}
+              </div>
+            </Section>
           )}
 
           {s?.settings && (
@@ -265,7 +297,7 @@ export default function Watch() {
               onClick={async () => {
                 if (!(await confirm({ title: L('Forget this watch?', 'إلغاء ربط هذه الساعة؟'), body: L('Steps and heart readings already saved stay.', 'الخطوات والقراءات المحفوظة تبقى.'), yes: L('Forget', 'إلغاء الربط') }))) return;
                 await live.session?.disconnect?.();
-                set({ status: 'idle', session: null, battery: null, heart: null, log: [] });
+                resetLive();
                 setWatch(null);
               }}
             >
@@ -284,5 +316,20 @@ function Tile({ icon, label, value }) {
       <p className="muted flex items-center gap-1 text-xs">{icon}{label}</p>
       <p className="tabular text-lg font-extrabold">{value}</p>
     </div>
+  );
+}
+
+// Today's heart readings as a small line, minute of day across.
+function Spark({ points, color }) {
+  const vals = points.map((p) => p[1]);
+  const lo = Math.min(...vals) - 5;
+  const hi = Math.max(...vals) + 5;
+  const x = (m) => (m / 1440) * 300;
+  const y = (b) => 50 - ((b - lo) / (hi - lo || 1)) * 46;
+  return (
+    <svg viewBox="0 0 300 54" className="h-14 w-full" role="img" aria-label="heart today">
+      <line x1="0" x2="300" y1="52" y2="52" stroke="currentColor" opacity="0.15" />
+      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" points={points.map(([m, b]) => `${x(m).toFixed(1)},${y(b).toFixed(1)}`).join(' ')} />
+    </svg>
   );
 }

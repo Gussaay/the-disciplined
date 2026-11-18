@@ -15,7 +15,7 @@ import { addSet, finishSession, makeExercise, setComplete } from '../lib/gymSess
 import { hrStats } from '../lib/hrParse';
 import { connectHeartRate, heartRateSupported } from '../lib/heartRate';
 import { watchSupported } from '../lib/watch';
-import { link as linkWatch, live as watchLive, onHeart, subscribe as watchSubscribe } from '../lib/watchLive';
+import { link as linkWatch, live as watchLive, notifyWatch, onHeart, subscribe as watchSubscribe } from '../lib/watchLive';
 
 const NONE = {};
 const EMPTY = [];
@@ -109,6 +109,15 @@ export default function GymSession() {
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useMyWatch]);
+  // Tell the watch the workout is on, once per workout.
+  const greeted = useRef('');
+  useEffect(() => {
+    if (!useMyWatch || watchState !== 'connected' || greeted.current === active?.id) return;
+    greeted.current = active?.id;
+    const sess = watchLive.session;
+    notifyWatch(sess?.canStartHeart?.() ? `Workout on: ${active?.name || 'gym'}` : 'Workout on. Start Training on the watch for live heart rate');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useMyWatch, watchState]);
   useEffect(() => {
     if (!useMyWatch || watchState !== 'connected') return undefined;
     const measure = () => watchLive.session?.measureHeart?.().catch(() => {});
@@ -120,11 +129,24 @@ export default function GymSession() {
     };
   }, [useMyWatch, watchState]);
 
+  // What the watch shows when the rest is over: the next set to do.
+  const nextSetText = () => {
+    for (const e of active?.exercises || []) {
+      const k = e.sets.findIndex((x) => !x.done);
+      if (k < 0) continue;
+      const name = typeof e.name === 'string' ? e.name : e.name?.en || EXERCISES[e.exerciseId]?.name?.en || 'next exercise';
+      const x = e.sets[k];
+      return `Rest over. ${name}: set ${k + 1}${x.reps ? `, ${x.reps} reps` : ''}${x.weight ? ` x ${x.weight} kg` : ''}`;
+    }
+    return 'Rest over. All sets done!';
+  };
+
   // The rest is over: a short buzz, then the bar goes away.
   useEffect(() => {
     if (restUntil && now >= restUntil) {
       setRestUntil(0);
       navigator.vibrate?.([200, 100, 200]);
+      if (useMyWatch) notifyWatch(nextSetText());
     }
   }, [now, restUntil]);
 
@@ -210,6 +232,7 @@ export default function GymSession() {
       hr: done.hr,
       records: newRecords,
     });
+    if (useMyWatch) notifyWatch(`Done! ${sessionMinutes(done)} min, ${sessionSets(done)} sets`);
     setActive(null);
   };
 
@@ -228,7 +251,12 @@ export default function GymSession() {
           </div>
           {useMyWatch ? (
             <button
-              onClick={() => (watchState === 'connected' ? watchLive.session?.measureHeart?.().catch(() => {}) : linkWatch(savedWatch, profile))}
+              onClick={() => {
+                const sess = watchLive.session;
+                if (watchState !== 'connected') linkWatch(savedWatch, profile);
+                else if (sess?.canStartHeart?.() === false && sess.promptHeart) sess.promptHeart().catch(() => {});
+                else sess?.measureHeart?.().catch(() => {});
+              }}
               className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white/15 px-3 font-bold"
               aria-label={L(`Heart rate from my watch ${bpm || ''}`, `النبض من ساعتي ${bpm || ''}`)}
             >

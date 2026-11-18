@@ -6,7 +6,7 @@ import { isNative } from './native';
 import { FITPRO_SERVICES, GROUP, CMD, ack, craft, createAssembler, fitproChars, initSequence, needsAck, parsePacket } from './fitpro';
 import { parseHeartRate } from './hrParse';
 import { hex } from './scaleParse';
-import { HEART_CANDIDATES, LS02, isLs02, ls02Cmd, parseLs02 } from './ls02';
+import { HEART_CANDIDATES, LS02, isLs02, ls02Alert, ls02Cmd, parseLs02 } from './ls02';
 
 const HR_SERVICE = '0000180d-0000-1000-8000-00805f9b34fb';
 const HR_MEASUREMENT = '00002a37-0000-1000-8000-00805f9b34fb';
@@ -120,8 +120,13 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       const event = parseLs02(chunk, { steps });
       if (!event) return;
       understood = true;
-      if (event.type === 'heart') lastHeartAt = Date.now();
-      if (event.type === 'day') onEvent(dayEvent(event.steps));
+      if (event.type === 'heart' && !event.auto) lastHeartAt = Date.now();
+      if (event.type === 'old') return;
+      if (event.type === 'ack') {
+        note(`watch confirmed: ${event.what}`);
+        onEvent(event);
+      } else if (event.type === 'heartScreen') note(`heart screen ${event.open ? 'opened' : 'closed'} on the watch`);
+      else if (event.type === 'day') onEvent(dayEvent(event.steps));
       else if (event.type === 'stepsChanged') {
         clearTimeout(stepsTimer);
         stepsTimer = setTimeout(() => sendGeneral(ls02Cmd.steps()).catch(() => {}), 1500);
@@ -144,11 +149,15 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       }
       await readBattery();
     };
-    const start = [ls02Cmd.time(), ls02Cmd.user(profileNow, watchSettings), ls02Cmd.battery(), ls02Cmd.steps()];
+    const start = [ls02Cmd.time(), ls02Cmd.format(), ls02Cmd.firmware(), ls02Cmd.user(profileNow, watchSettings), ls02Cmd.battery(), ls02Cmd.steps()];
     for (const packet of start) {
       await sendGeneral(packet).catch((e) => note(`send: ${e?.message || e}`));
       await sleep(250);
     }
+    // Keep the watch's own heart monitoring on (a reading every 10 minutes)
+    // and ask for today's heart history.
+    await sendData(ls02Cmd.heartOn());
+    await sleep(200);
     await sendData(ls02Cmd.heartAll());
     await sleep(1500);
     // Nothing understood yet: try the FitPro start-up on the same channel.
@@ -160,8 +169,17 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       }
     }
     await readBattery();
+    // A message on the watch screen; the watch vibrates and echoes each part.
+    const alert = async (text) => {
+      for (const part of ls02Alert(text)) {
+        await sendGeneral(part);
+        await sleep(120);
+      }
+    };
     return {
       protocol: 'realtek',
+      notify: (text) => alert(text),
+      promptHeart: () => alert('Open heart rate to measure'),
       measureHint: true,
       // Heart rate: the LS02 notes put these on the data channel, but this
       // watch did not answer there, so both channels are asked; the reply in
@@ -169,8 +187,9 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       measureHeart: async () => {
         if (framed) return sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x01]));
         if (heartCmd) return sendOn(heartCmd[0], heartCmd[1]);
-        await sendGeneral([0xe5, 0x11]).catch(() => {});
-        return sendData(ls02Cmd.heartOn());
+        // No start command known: keep monitoring on and ask for the latest.
+        await sendData(ls02Cmd.heartOn());
+        return sendData(ls02Cmd.heartAll());
       },
       canStartHeart: () => Boolean(framed || heartCmd),
       /**
@@ -198,12 +217,12 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       },
       stopHeart: async () => {
         if (framed) return sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x00]));
-        await sendGeneral([0xe5, 0x00]).catch(() => {});
+        if (heartCmd) await sendGeneral([0xe5, 0x00]).catch(() => {});
         return sendData(ls02Cmd.heartAll());
       },
       settings: true,
       applySettings: (next) => sendGeneral(ls02Cmd.user({ ...profileNow, ...next }, next)),
-      findWatch: () => (framed ? sendGeneral(craft(GROUP.general, CMD.findBand, [0x01])) : Promise.reject(new Error('Not supported on this watch yet'))),
+      findWatch: () => (framed ? sendGeneral(craft(GROUP.general, CMD.findBand, [0x01])) : alert('Here I am!')),
       refresh,
       syncTime: () => (framed ? sendGeneral(initSequence(profileNow)[1]) : sendGeneral(ls02Cmd.time())),
       disconnect: () => BleClient.disconnect(id).catch(() => {}),
