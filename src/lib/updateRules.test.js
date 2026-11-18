@@ -16,3 +16,11 @@ test('an over-the-air bundle installs only on the APK it was built for', () => {
   assert.equal(bundleFits(m, { running: '1.0.19', nativeHash: '' }), 'needs-apk');
   assert.equal(bundleFits(null, { running: '1.0.19', nativeHash: 'abc' }), 'none');
 });
+
+test('a bundle with minNativeBuild installs on that APK build or newer', () => {
+  const m = { version: '1.0.70', url: 'https://x/b.zip', nativeHash: 'new', minNativeBuild: 66 };
+  assert.equal(bundleFits(m, { running: '1.0.69', nativeHash: 'old', build: '66' }), 'install');
+  assert.equal(bundleFits(m, { running: '1.0.69', nativeHash: 'old', build: '70' }), 'install');
+  assert.equal(bundleFits(m, { running: '1.0.65', nativeHash: 'old', build: '65' }), 'needs-apk');
+  assert.equal(bundleFits(m, { running: '1.0.65', nativeHash: 'new', build: '65' }), 'install');
+});

@@ -2,7 +2,7 @@
 //
 //   over the air  CI publishes the built web app as a zip with a manifest,
 //                 https://<site>/latest/update.json
-//                 { version, url, checksum, nativeHash, notes }.
+//                 { version, url, checksum, nativeHash, minNativeBuild, notes }.
 //                 The app downloads it in the background (Capgo updater) and
 //                 switches to it the next time it starts, or at once when the
 //                 person presses "Restart now". A few hundred KB, no install.
@@ -11,10 +11,10 @@
 //                 Needed when the native side changed (a new plugin,
 //                 permissions). The app offers the download; Android installs it.
 //
-// The safety rule: a web bundle is installed only when its nativeHash equals
-// the one this app was built with. Web code that calls a plugin the installed
-// APK lacks would crash on start. The running code always carries the hash of
-// the APK under it, because a bundle with another hash is never installed.
+// The safety rule (the Easy Pedia method): a web bundle is installed only on
+// an APK with build >= its minNativeBuild, which CI sets to the build where the
+// native side last changed (or when the native fingerprint matches). Web code
+// that calls a plugin the installed APK lacks would crash on start.
 import { App as CapApp } from '@capacitor/app';
 import { isNative } from './native';
 import { UPDATE_SITE } from '../config';
@@ -33,7 +33,8 @@ let state = {
   checking: false,
   downloading: false,
   ready: null,       // version downloaded and queued for the next start
-  apk: null,         // { version, versionCode, apkUrl, notes } when a newer APK exists
+  apk: null,         // { version, versionCode, apkUrl, notes } when this APK is too old for the updates
+  latestApk: null,   // the newest published APK, for a manual download
   upToDate: false,
   needsApk: false,   // an over-the-air update exists but this APK is too old for it
   error: null,
@@ -89,16 +90,18 @@ export async function checkForUpdates() {
       getJson('/native-version.json').catch(() => null),
       getJson('/latest/update.json').catch(() => null),
     ]);
-    set({ apk: newerApk(apk, info.build) ? apk : null });
     if (!apk && !manifest) throw new Error('The update site did not answer');
 
-    const fit = bundleFits(manifest, { running, nativeHash: NATIVE_HASH });
-    set({ needsApk: fit === 'needs-apk' });
+    // As in Easy Pedia: the APK is offered only when this one is too old for
+    // the over-the-air update; otherwise every build would ask for an install.
+    const fit = bundleFits(manifest, { running, nativeHash: NATIVE_HASH, build: info.build });
+    const newer = newerApk(apk, info.build) ? apk : null;
+    set({ needsApk: fit === 'needs-apk', apk: fit === 'needs-apk' || (!manifest && newer) ? newer : null, latestApk: newer });
     if (state.apk) notifyOnce(`apk-${state.apk.version}`, {
       title: 'New version of the app',
       titleAr: 'إصدار جديد من التطبيق',
-      body: `Version ${state.apk.version} is ready. Open the app and press Download.`,
-      bodyAr: `الإصدار ${state.apk.version} جاهز. افتح التطبيق واضغط تنزيل.`,
+      body: `Version ${state.apk.version} is ready. Open the app and tap Download and install.`,
+      bodyAr: `الإصدار ${state.apk.version} جاهز. افتح التطبيق واضغط تنزيل وتثبيت.`,
     });
     if (fit === 'install' && state.ready !== manifest.version) {
       set({ downloading: true });

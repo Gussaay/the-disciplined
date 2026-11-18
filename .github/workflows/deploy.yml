@@ -103,7 +103,7 @@ jobs:
       # fine and then fails only when the feature is used.
       - name: Check the native plugins really synced
         run: |
-          for plugin in capacitor-local-notifications capacitor-community-bluetooth-le capgo-capacitor-health capgo-capacitor-social-login capgo-capacitor-updater capgo-capacitor-native-biometric; do
+          for plugin in capacitor-filesystem capacitor-community-file-opener capacitor-local-notifications capacitor-community-bluetooth-le capgo-capacitor-health capgo-capacitor-social-login capgo-capacitor-updater capgo-capacitor-native-biometric; do
             grep -qi "$plugin" android/capacitor.settings.gradle \
               || { echo "::error::$plugin is missing from the Android project"; exit 1; }
           done
@@ -242,6 +242,13 @@ jobs:
           ZIP="bundle-${VERSION}.zip"
           (cd dist && zip -qr "../${ZIP}" .)
           CHECKSUM=$(sha256sum "${ZIP}" | cut -d' ' -f1)
+          # The oldest APK build this bundle runs on (the Easy Pedia method):
+          # unchanged while the native side is unchanged, this build when it changed.
+          PREV=$(curl -fsSL "${SITE_URL}/latest/update.json?t=$(date +%s)" || echo '{}')
+          PREV_HASH=$(echo "$PREV" | jq -r '.nativeHash // ""')
+          PREV_MIN=$(echo "$PREV" | jq -r '.minNativeBuild // 0')
+          if [ "$PREV_HASH" = "$NATIVE_HASH" ] && [ "$PREV_MIN" -gt 0 ]; then MIN_NATIVE_BUILD=$PREV_MIN; else MIN_NATIVE_BUILD=$VERSION_CODE; fi
+          echo "minNativeBuild: $MIN_NATIVE_BUILD (previous hash $PREV_HASH, min $PREV_MIN)"
           NOTES=$(git log -1 --pretty=%s | sed 's/\\/\\\\/g; s/"/\\"/g')
           mkdir -p dist/latest
           mv "${ZIP}" dist/latest/
@@ -251,6 +258,7 @@ jobs:
             "url": "${SITE_URL}/latest/${ZIP}",
             "checksum": "${CHECKSUM}",
             "nativeHash": "${NATIVE_HASH}",
+            "minNativeBuild": ${MIN_NATIVE_BUILD},
             "notes": "${NOTES}"
           }
           EOF

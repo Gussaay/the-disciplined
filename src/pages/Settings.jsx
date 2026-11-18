@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, Download, ExternalLink, Eye, EyeOff, KeyRound, Lock, LogIn, LogOut, Pencil, RefreshCw, Trash2, Upload } from 'lucide-react';
 import { biometricAvailable, forgetLogin, hasSavedLogin, verify } from '../lib/biometric';
-import UpdateBanner, { useUpdates } from '../components/UpdateBanner';
+import UpdateBanner, { ApkInstall, useUpdates } from '../components/UpdateBanner';
 import { checkForUpdates } from '../lib/liveUpdate';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
@@ -284,10 +284,18 @@ function AppUpdates() {
       {!u.checking && u.needsApk && (
         <p className="rounded-xl bg-gold-100 p-3 text-sm dark:bg-gold-500/10">
           {L(
-            'New features changed the phone part of the app, so updates over the air wait until you install the new APK once (Download above, then open the file). After that they arrive by themselves again.',
-            'غيّرت الميزات الجديدة الجزء الخاص بالهاتف، لذلك تنتظر التحديثات عبر الإنترنت حتى تثبّت ملف APK الجديد مرة واحدة (تنزيل بالأعلى ثم افتح الملف). بعدها تصل تلقائياً من جديد.',
+            'New features changed the phone part of the app, so updates over the air wait until you install the new APK once (Download and install above). After that they arrive by themselves again.',
+            'غيّرت الميزات الجديدة الجزء الخاص بالهاتف، لذلك تنتظر التحديثات عبر الإنترنت حتى تثبّت ملف APK الجديد مرة واحدة (تنزيل وتثبيت بالأعلى). بعدها تصل تلقائياً من جديد.',
           )}
         </p>
+      )}
+      {!u.apk && (
+        <details className="text-sm">
+          <summary className="muted cursor-pointer">{L('Reinstall the newest APK', 'أعد تثبيت أحدث APK')}</summary>
+          <div className="mt-2">
+            <ApkInstall apk={u.latestApk} label={L(`Download ${u.latestApk?.version || 'the newest'} APK`, `نزّل APK ${u.latestApk?.version || 'الأحدث'}`)} />
+          </div>
+        </details>
       )}
     </div>
   );

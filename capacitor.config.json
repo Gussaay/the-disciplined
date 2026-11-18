@@ -27,9 +27,12 @@
     },
     "CapacitorUpdater": {
       "autoUpdate": false,
+      "appReadyTimeout": 15000,
+      "responseTimeout": 30,
+      "resetWhenUpdate": true,
+      "keepUrlPathAfterReload": true,
       "autoDeleteFailed": true,
-      "autoDeletePrevious": true,
-      "resetWhenUpdate": true
+      "autoDeletePrevious": true
     }
   },
   "android": {

@@ -74,6 +74,8 @@
 
     <!-- Prayer and contact reminders. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Installing a downloaded app update from inside the app (Android asks once). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Lets the app see whether Health Connect is installed. -->
     <queries>
