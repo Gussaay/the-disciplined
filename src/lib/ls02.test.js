@@ -52,3 +52,11 @@ test('alerts, workouts and confirmations', () => {
   const hist = parseLs02([0x18, 0x07, 0xea, 0x0b, 0x12, 0x08, 70, 0xff, 72, 0, 0, 0, 0, 0, 0, 0, 0, 0], { now: new Date(2026, 10, 18, 9) });
   assert.deepEqual(hist.points, [[480, 70], [500, 72]]);
 });
+
+test('log issue link', async () => {
+  const { logIssueUrl } = await import('./reportLog.js');
+  const url = new URL(logIssueUrl('Watch log', ['a', 'b'.repeat(9000)]));
+  assert.equal(url.pathname, '/Gussaay/the-disciplined/issues/new');
+  assert.ok(url.searchParams.get('title').startsWith('[device-log]'));
+  assert.ok(url.searchParams.get('body').length < 6000);
+});

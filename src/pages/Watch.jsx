@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { BatteryMedium, Bluetooth, CheckCircle2, ClipboardCopy, Clock, Dumbbell, Footprints, HeartPulse, Link2, MessageSquare, RefreshCw, Search, Unlink } from 'lucide-react';
+import { BatteryMedium, Bluetooth, Bot, CheckCircle2, ClipboardCopy, Clock, Dumbbell, Footprints, HeartPulse, Link2, MessageSquare, RefreshCw, Search, Unlink } from 'lucide-react';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
@@ -7,6 +7,8 @@ import { Bars, Page, Section, useConfirm, useToast } from '../components/ui';
 import { pickWatch, watchSupported } from '../lib/watch';
 import { link, live, resetLive, subscribe } from '../lib/watchLive';
 import { SPORTS } from '../lib/ls02';
+import { logIssueUrl } from '../lib/reportLog';
+import { openUrl } from '../lib/native';
 import { dayKey, fromKey, lastDays } from '../lib/dates';
 
 const NONE = {};
@@ -278,6 +280,12 @@ export default function Watch() {
             </div>
           </Section>
 
+          <button
+            className="btn-soft w-full text-sm"
+            onClick={() => openUrl(logIssueUrl(`Watch log ${watch.name}`, [`${watch.name} ${watch.id} ${live.session?.protocol || ''} ${live.firmware || ''}`, `status ${live.status}`, live.error, ...live.log]))}
+          >
+            <Bot size={16} /> {L('Send log to Claude (GitHub)', 'أرسل السجل إلى Claude (GitHub)')}
+          </button>
           <div className="flex gap-2">
             <button
               className="btn-ghost flex-1 text-sm"
