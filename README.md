@@ -241,6 +241,19 @@ Both need the `FIREBASE_SERVICE_ACCOUNT_DISCIPLINED` secret (hosting deploy).
   rate only). "Copy connection log" copies the raw bytes for support. Android
   app only. Data lives in `watch` and `watchLog` (synced).
 
+- **Realtek watches (the GZCSW02 shows services 55FF/60FF; `src/lib/ls02.js`):**
+  steps come from the watch's hourly record (B2), heart readings from its own
+  10-minute monitoring (F7/18 03, turned on at connect), the live value while
+  its heart screen is open (E5/16 11), and its heart summary (F7/18 04).
+  Messages (0F) make the watch buzz and show text: used for Find, a test
+  message and the workout (start, rest over with the next set, finish).
+  Workouts started on the watch (FD) are saved with their heart rate. The
+  watch echoes the clock, units and messages, which the page shows as
+  "the watch confirmed". No command is known that starts a heart measurement
+  from the phone; the first Measure tries the candidates in `HEART_CANDIDATES`
+  and keeps one that works, otherwise Measure buzzes the watch to tap its
+  heart screen.
+
 - **Live heart rate during a workout:** the Watch button in a workout connects
   over Bluetooth to anything that offers the standard heart-rate service: chest
   straps, and watches with "broadcast heart rate" switched on (Garmin, Polar,
