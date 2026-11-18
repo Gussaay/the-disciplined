@@ -6,7 +6,7 @@ import { isNative } from './native';
 import { FITPRO_SERVICES, GROUP, CMD, ack, craft, createAssembler, fitproChars, initSequence, needsAck, parsePacket } from './fitpro';
 import { parseHeartRate } from './hrParse';
 import { hex } from './scaleParse';
-import { LS02, isLs02, ls02Cmd, parseLs02 } from './ls02';
+import { HEART_CANDIDATES, LS02, isLs02, ls02Cmd, parseLs02 } from './ls02';
 
 const HR_SERVICE = '0000180d-0000-1000-8000-00805f9b34fb';
 const HR_MEASUREMENT = '00002a37-0000-1000-8000-00805f9b34fb';
@@ -91,6 +91,9 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
     const sendData = (bytes) => writeTo(LS02.data, LS02.dataWrite, bytes, false).catch((e) => note(`data write: ${e?.message || e}`));
     let framed = false;
     let understood = false;
+    let lastHeartAt = 0;
+    let heartCmd = watchSettings.heartCmd || null; // [channel, bytes] learnt earlier
+    const sendOn = (channel, bytes) => (channel === 'data' ? sendData(bytes) : sendGeneral(bytes));
     const steps = new Map();
     let stepsTimer = null;
     const asm = createAssembler();
@@ -117,6 +120,7 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       const event = parseLs02(chunk, { steps });
       if (!event) return;
       understood = true;
+      if (event.type === 'heart') lastHeartAt = Date.now();
       if (event.type === 'day') onEvent(dayEvent(event.steps));
       else if (event.type === 'stepsChanged') {
         clearTimeout(stepsTimer);
@@ -164,9 +168,33 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       // the log shows which one the watch listens to.
       measureHeart: async () => {
         if (framed) return sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x01]));
+        if (heartCmd) return sendOn(heartCmd[0], heartCmd[1]);
         await sendGeneral([0xe5, 0x11]).catch(() => {});
-        await sendGeneral(ls02Cmd.heartOn()).catch(() => {});
         return sendData(ls02Cmd.heartOn());
+      },
+      canStartHeart: () => Boolean(framed || heartCmd),
+      /**
+       * Tries the candidate start commands one by one (the watch must be on
+       * the wrist, its heart screen closed). Resolves to the command that made
+       * the watch send heart readings, or null; `onTry(i, n)` reports progress.
+       */
+      learnHeart: async (onTry = () => {}) => {
+        for (let i = 0; i < HEART_CANDIDATES.length; i += 1) {
+          const [channel, bytes] = HEART_CANDIDATES[i];
+          onTry(i + 1, HEART_CANDIDATES.length);
+          note(`trying heart start ${channel} ${hex(bytes)}`);
+          const before = Date.now();
+          await sendOn(channel, bytes).catch(() => {});
+          await sleep(6000);
+          if (lastHeartAt > before) {
+            heartCmd = [channel, bytes];
+            note(`heart start found: ${channel} ${hex(bytes)}`);
+            await sendGeneral([0xe5, 0x00]).catch(() => {});
+            return heartCmd;
+          }
+        }
+        note('no heart start command answered');
+        return null;
       },
       stopHeart: async () => {
         if (framed) return sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x00]));

@@ -40,6 +40,24 @@ export const ls02Cmd = {
   },
 };
 
+/**
+ * Commands that may start a heart measurement on these watches; none is
+ * documented. The app tries them one at a time and keeps the one the watch
+ * answers with heart readings. Only heart-rate ids (E5, 18) are tried.
+ */
+export const HEART_CANDIDATES = [
+  ['general', [0xe5, 0x11, 0x01]],
+  ['general', [0xe5, 0x01]],
+  ['general', [0xe5, 0x11, 0x00, 0x01]],
+  ['general', [0x18, 0x11]],
+  ['general', [0x18, 0x05]],
+  ['data', [0xe5, 0x11]],
+  ['data', [0xe5, 0x11, 0x01]],
+  ['general', [0xe5, 0x12]],
+  ['general', [0x18, 0x03]],
+  ['data', [0x18, 0x03]],
+];
+
 const sameDay = (p, i, now) => u16(p, i) === now.getFullYear() && p[i + 2] === now.getMonth() + 1 && p[i + 3] === now.getDate();
 const bpmOf = (v) => (v > 25 && v < 230 ? v : null);
 
@@ -73,6 +91,11 @@ export function parseLs02(p, { now = new Date(), steps = new Map() } = {}) {
     if (!sameDay(p, 2, now)) return { type: 'stepsRow' };
     steps.set(p[6], u16(p, 7));
     return { type: 'day', steps: [...steps.values()].reduce((a, b) => a + b, 0) };
+  }
+  // Seen after a heart measurement: F7 04, date, hour, minute, max, min, average.
+  if (id === 0xf7 && p[1] === 0x04 && p.length >= 11 && sameDay(p, 2, now)) {
+    const bpm = bpmOf(p[10]);
+    return bpm ? { type: 'heart', bpm, bpmMax: bpmOf(p[8]), bpmMin: bpmOf(p[9]), spo2: null, systolic: null, diastolic: null } : null;
   }
   if ((id === 0x09 || id === 0xb1) && p.length >= 8) return { type: 'stepsChanged' };
   if (id === 0xd1 && p[1] === 0x0a) return { type: 'findPhone' };
