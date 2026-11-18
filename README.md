@@ -326,3 +326,14 @@ phone, so they arrive with no connection.
 - Azkar: Hisn al-Muslim, from [rn0x/Adhkar-json](https://github.com/rn0x/Adhkar-json).
 - Food values: rounded from standard food composition tables; estimates for
   daily tracking, not medical advice. Targets use the Mifflin-St Jeor equation.
+
+## Device log review
+
+"Send log to Claude (GitHub)" on the watch page opens a new issue titled
+`[device-log] …` with the connection log filled in; tap Submit. The
+`Device log review` workflow (`.github/workflows/log-review.yml`) then has
+Claude read the log against the code and answer on the issue, using the
+`CLAUDE_CODE_OAUTH_TOKEN` secret (run `claude setup-token` on a computer with
+Claude Code, signed in to your Claude plan). Without it, `GEMINI_API_KEY` is
+used. Comment `@claude …` on the issue to ask a follow-up. Only the repository
+owner's issues and comments start it.
