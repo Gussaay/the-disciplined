@@ -22,6 +22,10 @@ test('notifications', () => {
   // the GZCSW02's live step record (from Qusay's log, 2026-11-18 00:18)
   const t = new Map();
   assert.deepEqual(parseLs02([0xf7, 0x03, 0x07, 0xea, 0x0b, 0x12, 0x00, 0x01, 0x4c], { now: new Date(2026, 10, 18, 0, 18), steps: t }), { type: 'day', steps: 332 });
+  // heart summary after a measurement (Qusay's log, 00:37)
+  const h = parseLs02([0xf7, 0x04, 0x07, 0xea, 0x0b, 0x12, 0x00, 0x25, 0x54, 0x4e, 0x51], { now: new Date(2026, 10, 18, 0, 40) });
+  assert.equal(h.bpm, 81);
+  assert.equal(h.bpmMax, 84);
   // old history rows (7 August) do not count for today
   parseLs02([0xb2, 0x07, 0xea, 0x08, 0x07, 0x14, 0x02, 0xc2, 0, 0, 0, 0, 0, 0x02, 0x0e, 0x06, 0x02, 0xc2], { now: new Date(2026, 10, 18), steps: t });
   assert.deepEqual(parseLs02([0xb2, 0xfd, 0xfb], { now: new Date(2026, 10, 18), steps: t }), { type: 'day', steps: 332 });

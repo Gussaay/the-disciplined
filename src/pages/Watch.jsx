@@ -20,6 +20,7 @@ export default function Watch() {
   const [watch, setWatch] = useStore('watch', null);
   const [log] = useStore('watchLog', NONE);
   const [busy, setBusy] = useState('');
+  const [learning, setLearning] = useState(null);
   useSyncExternalStore(subscribe, () => live.version || 0);
 
   useEffect(() => {
@@ -144,8 +145,39 @@ export default function Watch() {
                 </p>
               </div>
             </div>
-            {s && s.protocol !== 'heart-rate' && s.measureHint && busy === 'heart' && (
-              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('The phone asked the watch to measure. Keep still. If nothing shows within 30 seconds, open the heart screen on the watch once, then send me the connection log.', 'طلب الهاتف من الساعة القياس. ابقَ ثابتاً. إن لم تظهر قراءة خلال 30 ثانية فافتح شاشة النبض في الساعة مرة، ثم أرسل لي سجل الاتصال.')}</p>
+            {s?.learnHeart && !s.canStartHeart() && (
+              <div className="space-y-2 rounded-xl bg-brand-50 p-3 text-sm dark:bg-white/5">
+                <p>
+                  {learning
+                    ? L(`Trying start command ${learning[0]} of ${learning[1]}… keep the watch on your wrist and don't touch it.`, `تجربة أمر البدء ${learning[0]} من ${learning[1]}… أبقِ الساعة على معصمك ولا تلمسها.`)
+                    : L('Your watch needs its start command for heart rate. Let the app find it once (about a minute): watch on the wrist, heart screen closed.', 'ساعتك تحتاج أمر بدء قياس النبض. دع التطبيق يجده مرة واحدة (حوالي دقيقة): الساعة على المعصم وشاشة النبض مغلقة.')}
+                </p>
+                {!learning && (
+                  <button
+                    className="btn-soft w-full"
+                    disabled={live.status !== 'connected'}
+                    onClick={async () => {
+                      setLearning([0, 0]);
+                      try {
+                        const found = await s.learnHeart((i, n) => setLearning([i, n]));
+                        if (found) {
+                          setWset({ ...wset, heartCmd: found });
+                          toast(L('Found it. Measure now starts from the phone.', 'وُجد. القياس يبدأ الآن من الهاتف.'));
+                        } else {
+                          toast(L('No command worked. Copy the connection log and send it to Claude.', 'لم ينجح أي أمر. انسخ سجل الاتصال وأرسله إلى Claude.'), 'error');
+                        }
+                      } finally {
+                        setLearning(null);
+                      }
+                    }}
+                  >
+                    <HeartPulse size={16} /> {L('Find the start command', 'ابحث عن أمر البدء')}
+                  </button>
+                )}
+              </div>
+            )}
+            {s?.learnHeart && !s.canStartHeart() && busy === 'heart' && (
+              <p className="rounded-xl bg-brand-50 p-2 text-sm dark:bg-white/5">{L('Open the heart screen on the watch; the reading appears here.', 'افتح شاشة النبض في الساعة؛ ستظهر القراءة هنا.')}</p>
             )}
             {s && s.protocol !== 'heart-rate' && (
               <button
