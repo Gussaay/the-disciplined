@@ -107,7 +107,10 @@ export async function startDownload({ id, url, fileName, title, onDone, meta, au
   }
 
   const key = id || fileName || url;
-  const name = fileName || url.substring(url.lastIndexOf('/') + 1) || 'download';
+  const base = fileName || url.substring(url.lastIndexOf('/') + 1) || 'download';
+  // Each attempt gets its own file: a stalled transfer is not cancelled and
+  // could still resume, so a retry must never write to the same file.
+  const name = base.replace(/(\.[a-z0-9]+)?$/i, (ext) => `-${Date.now().toString(36)}${ext || ''}`);
 
   const existing = getDownload(key);
   if (existing?.status === 'downloading') return { ok: true, alreadyRunning: true };
