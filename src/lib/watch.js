@@ -30,6 +30,13 @@ export async function pickWatch() {
   if (!isNative) throw Object.assign(new Error('The watch works in the Android app'), { code: 'watch-web' });
   const BleClient = await ble();
   const device = await BleClient.requestDevice({ optionalServices: [...FITPRO_SERVICES, LS02.general, LS02.data, HR_SERVICE, BATTERY_SERVICE] });
+  // Bond with the watch, like its own app does when it is bound: some of
+  // these watches only take control orders over a bonded link, while
+  // readings (steps, battery) work either way. If the watch refuses or
+  // the phone cannot bond, carry on unbonded as before.
+  try {
+    await BleClient.createBond(device.deviceId);
+  } catch { /* not bondable: readings still work */ }
   return { id: device.deviceId, name: device.name || 'Watch' };
 }
 
@@ -191,8 +198,16 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
         if (heartCmd) return sendOn(heartCmd[0], heartCmd[1]);
         // The start order the watch's own app (GloryFit) sends: E5 11 on
         // the general channel. Readings come back as E5 frames, which
-        // parseLs02 already understands.
-        return sendGeneral(ls02Cmd.heartStart());
+        // parseLs02 already understands. The watch can miss the first
+        // order while it is still streaming history, so, like GloryFit's
+        // command queue, send it again if no reading arrives.
+        const before = Date.now();
+        for (let tries = 0; tries < 3; tries += 1) {
+          await sendGeneral(ls02Cmd.heartStart());
+          await sleep(6000);
+          if (lastHeartAt > before) break;
+        }
+        return undefined;
       },
       // Blood pressure and oxygen, started and stopped the GloryFit way.
       measureBp: () => (framed ? Promise.reject(new Error('fitpro-bp')) : sendGeneral(ls02Cmd.bpStart())),

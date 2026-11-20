@@ -25,6 +25,7 @@ test('commands', () => {
   assert.deepEqual(ls02Cmd.shakePhotoOff(), [0xc4, 0x03]);
   assert.deepEqual(ls02Cmd.language(2), [0xaf, 0xab, 2]);
   assert.deepEqual(ls02Cmd.restart(), [0xe8, 0x12]);
+  assert.deepEqual(ls02Cmd.powerOff(), [0xe8, 0x11]);
   assert.deepEqual(ls02Cmd.factoryReset(), [0xad]);
   assert.deepEqual(ls02Cmd.alarm({ on: true, hour: 7, minute: 30 }), [0xab, 62, 7, 30, 2, 0, 2, 0, 0]);
   assert.deepEqual(ls02Cmd.alarm({ on: false, hour: 7, minute: 30 }), [0xab, 62, 7, 30, 0, 0, 0, 0, 0]);

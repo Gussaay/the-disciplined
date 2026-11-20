@@ -55,8 +55,11 @@ export const ls02Cmd = {
   shakePhotoOff: () => [0xc4, 0x03],
   // The watch's display language, by its number in the watch's list.
   language: (n = 0) => [0xaf, 0xab, Number(n) & 0xff],
-  // Restart the watch, and wipe it back to factory state (GloryFit's orders).
+  // Restart and power-off orders (GloryFit's E8 family). Careful: on the
+  // GZCSW02 the E8 12 "restart" powered the watch off and it stayed off
+  // (seen 2026-11-21), so the app does not offer it on a button.
   restart: () => [0xe8, 0x12],
+  powerOff: () => [0xe8, 0x11],
   factoryReset: () => [0xad],
   // One alarm in the first slot, GloryFit's AB order: cycle is a weekday
   // bitmask (62 = the value GloryFit itself substitutes for a plain alarm).

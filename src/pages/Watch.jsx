@@ -337,15 +337,8 @@ export default function Watch() {
                   <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected' || busy === 'shake'} onClick={() => act('shake', () => s.setShakePhoto(true), L('Shake to take a photo is on', 'الاهتزاز للتصوير يعمل'))}>
                     {L('Shake for photo', 'اهتزاز للصورة')}
                   </button>
-                  <button
-                    className="btn-soft !min-h-[44px] text-sm text-red-600"
-                    disabled={live.status !== 'connected' || busy === 'restart'}
-                    onClick={async () => {
-                      if (!(await confirm({ title: L('Restart the watch?', 'إعادة تشغيل الساعة؟'), body: L('The watch turns off and on again.', 'تنطفئ الساعة وتعمل من جديد.'), yes: L('Restart', 'إعادة التشغيل') }))) return;
-                      await act('restart', () => s.restartWatch(), L('Restart sent', 'أُرسلت إعادة التشغيل'));
-                    }}
-                  >
-                    {L('Restart watch', 'إعادة تشغيل الساعة')}
+                  <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected' || busy === 'shake'} onClick={() => act('shake', () => s.setShakePhoto(false), L('Shake for photo is off', 'أُوقف الاهتزاز للتصوير'))}>
+                    {L('Shake photo off', 'إيقاف اهتزاز الصورة')}
                   </button>
                 </div>
               </div>
