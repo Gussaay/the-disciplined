@@ -349,6 +349,7 @@ function Weighing({ profile, onClose, onSave }) {
   const { L, num } = useLang();
   const [scales, setScales] = useStore('scales', EMPTY);
   const [live, setLive] = useState(null);
+  const [locked, setLocked] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [waited, setWaited] = useState(false);
@@ -362,9 +363,14 @@ function Weighing({ profile, onClose, onSave }) {
     scanAdverts(({ id, name, mfr }) => {
       if (!alive || result) return;
       const saved = known.get(id);
-      if (known.size && !saved) return;
+      // A scale whose saved entry no longer matches its Bluetooth id (or a
+      // second scale) must still weigh in: it is saved again on success.
       const reading = saved?.learnt ? parseLearnt(mfr, saved.learnt) : parseAdvert(mfr, { mac: id });
       if (!reading) return;
+      if (reading.encrypted) {
+        setLocked(true);
+        return;
+      }
       setLive({ ...reading, id, name });
       const { settled } = settler.current.push(reading);
       if (!settled) return;
@@ -413,6 +419,11 @@ function Weighing({ profile, onClose, onSave }) {
                 : L('Step on the scale barefoot. The app reads it directly; the OKOK app is not needed.', 'قف على الميزان حافياً. التطبيق يقرأه مباشرة دون حاجة لتطبيق OKOK.')}
             </p>
           </div>
+          {locked && !live && (
+            <p className="muted text-sm">
+              {L('Your scale is answering, but this model encrypts its readings for the OKOK app, so no other app can read them. Weight can still be added by hand.', 'ميزانك يرد، لكن هذا الطراز يشفّر قراءاته لتطبيق OKOK فلا يستطيع أي تطبيق آخر قراءتها. يمكن إضافة الوزن يدوياً.')}
+            </p>
+          )}
           {waited && !live && (
             <p className="muted text-sm">
               {L('Nothing yet. Make sure the scale shows a weight, that Location is on for Bluetooth, and try “Find” under My scales to check what the phone sees.', 'لا شيء بعد. تأكد أن الميزان يعرض وزناً وأن الموقع مفعّل للبلوتوث، وجرّب «بحث» في موازيني لترى ما يلتقطه الهاتف.')}

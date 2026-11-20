@@ -3,17 +3,26 @@
 // on them they broadcast the weight (and, once the measurement is done, the
 // body impedance) in the "manufacturer data" of every advertisement.
 //
-// Formats, as documented by the openScale project (BluetoothOKOK and
-// BluetoothOKOK2 drivers). `data` is the manufacturer data without its 2-byte
-// company id, exactly as Android hands it over.
-//   0x20CA "V20"  19 bytes: [6] flags (bit0 final, bit2 two decimals),
-//                 [8..9] weight BE, [10..11] impedance BE (x10), [12] XOR checksum
-//                 starting from 0x20.
-//   0x11CA "V11"  23 bytes: [3..4] weight BE, [9] properties (bits1-2 decimals,
-//                 bits3-4 unit), [16] XOR checksum starting from 0xCA^0x11.
-//   0x??C0 "C0"   13 bytes: [0..1] weight BE, [2..3] impedance BE, [6] attributes
-//                 (bit0 final, bits1-2 decimals, bits3-4 unit), [7..12] MAC.
+// Formats, as the scale maker's own app (OKOK, by Chipsea) reads them -
+// checked against that app's code, which is the authority for these scales.
+// `data` is the manufacturer data without its 2-byte company id, exactly as
+// Android hands it over.
+//   0x20CA "V20"  [6] properties, [8..9] weight BE, [10..11] impedance BE.
+//                 A frame whose properties bit0 is set is a status frame,
+//                 not a measurement: Chipsea reads no weight from it.
+//   0x11CA "V11"  [3..4] weight BE, [9] properties (bits1-2 decimals,
+//                 bits3-4 unit). Weight only, no impedance.
+//   0x??C0 "C0/V2" 13 bytes: [0..1] weight BE, [2..3] impedance BE,
+//                 [6] properties, [7..12] the scale's MAC. When bit7 of
+//                 [2] is set the scale ENCRYPTS the weight and impedance
+//                 with a key only the OKOK cloud hands out; no other app
+//                 can read them (parseAdvert reports this, see below).
 //   0xF0FF "VF0"  weight LE at [2..3], one decimal.
+// Chipsea checks no checksum on any of these frames, and neither does this
+// code any more: the XOR checksums an earlier version verified (from the
+// openScale project) made the settler reject every real reading whose
+// firmware laid the frame out slightly differently, so no weight was ever
+// saved. Stability of the weight itself is the check now.
 // Anything else can be taught: the person types what the display shows and
 // the app finds where that number sits in the bytes (see learnFormat).
 
@@ -60,25 +69,26 @@ export function parseAdvert(mfr, { mac } = {}) {
     const id = Number(key);
     const d = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
     if (id === 0x20ca && d.length >= 13) {
-      let sum = 0x20;
-      for (let i = 0; i < 12; i++) sum ^= d[i];
-      const weight = be16(d, 8) / ((d[6] & 4) === 4 ? 100 : 10);
+      // Properties bit0 set: a status frame, not a measurement (Chipsea
+      // reads no weight from it), so skip it instead of trusting its bytes.
+      if (d[6] & 1) continue;
+      const weight = toKg(be16(d, 8), d[6], d[8], d[9]);
       if (!plausible(weight)) continue;
-      return { format: 'V20', weight: round(weight), impedance: ohms(be16(d, 10)), final: (d[6] & 1) === 1, checksum: d[12] === sum };
+      return { format: 'V20', weight: round(weight), impedance: ohms(be16(d, 10)), final: null, checksum: null };
     }
-    if (id === 0x11ca && d.length >= 17) {
-      let sum = 0xca ^ 0x11;
-      for (let i = 0; i < 16; i++) sum ^= d[i];
+    if (id === 0x11ca && d.length >= 7) {
       const weight = toKg(be16(d, 3), d[9], d[3], d[4]);
       if (!plausible(weight)) continue;
       // V11 scales are weight-only; a steady value is treated as final by the caller.
-      return { format: 'V11', weight: round(weight), impedance: null, final: null, checksum: d[16] === sum };
+      return { format: 'V11', weight: round(weight), impedance: null, final: null, checksum: null };
     }
     if ((id & 0xff) === 0xc0 && d.length >= 13) {
-      if (mac) {
-        const want = mac.toLowerCase().split(':').map((h) => parseInt(h, 16));
-        if (want.length === 6 && !want.every((b, i) => d[7 + i] === b)) continue;
-      }
+      // Encrypted V2 scale: bit7 of the impedance high byte. Its weight is
+      // scrambled with a key the OKOK cloud gives only to the OKOK app, so
+      // say so instead of failing silently. The MAC bytes are scrambled
+      // too, which is why the MAC is no longer used to reject frames: a
+      // neighbour's scale is far less likely than a locked or unbonded one.
+      if (d[2] & 0x80) return { format: 'V2', encrypted: true, weight: null, impedance: null, final: null, checksum: null };
       const weight = toKg(be16(d, 0), d[6], d[0], d[1]);
       if (!plausible(weight)) continue;
       return { format: 'C0', weight: round(weight), impedance: ohms(be16(d, 2)), final: (d[6] & 1) === 1, checksum: null };
@@ -150,8 +160,7 @@ export function createSettler({ holdMs = 2500 } = {}) {
   let done = false;
   return {
     push(reading, now = Date.now()) {
-      if (!reading || done) return { reading, settled: false };
-      if (reading.checksum === false) return { reading, settled: false };
+      if (!reading || typeof reading.weight !== 'number' || done) return { reading, settled: false };
       if (reading.final === true && reading.weight > 2) {
         done = true;
         return { reading, settled: true };

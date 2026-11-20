@@ -3,47 +3,55 @@ import assert from 'node:assert/strict';
 import { createSettler, fromHex, learnFormat, parseAdvert, parseLearnt } from './scaleParse.js';
 import { band, bodyComposition, bmiOf, summary } from './bodyComp.js';
 
-function v20({ weight, impedance, final = true, twoDecimals = false }) {
+function v20({ weight, impedance, status = false, twoDecimals = false }) {
   const d = new Uint8Array(19);
-  d[6] = (final ? 1 : 0) | (twoDecimals ? 4 : 0);
+  // Properties: bit0 marks a status frame (no weight in it); bits1-2 are the
+  // decimals (2 = two decimals), as Chipsea's app reads them.
+  d[6] = (status ? 1 : 0) | (twoDecimals ? 4 : 0);
   const raw = Math.round(weight * (twoDecimals ? 100 : 10));
   d[8] = raw >> 8; d[9] = raw & 0xff;
   d[10] = impedance >> 8; d[11] = impedance & 0xff;
-  let sum = 0x20;
-  for (let i = 0; i < 12; i++) sum ^= d[i];
-  d[12] = sum;
   return { [0x20ca]: d };
 }
 
-test('V20 adverts give weight, impedance and the final flag, with the checksum checked', () => {
+test('V20 adverts give weight and impedance, the way the OKOK app reads them', () => {
   const r = parseAdvert(v20({ weight: 57.2, impedance: 5123 }));
-  assert.deepEqual(r, { format: 'V20', weight: 57.2, impedance: 512.3, final: true, checksum: true });
+  assert.deepEqual(r, { format: 'V20', weight: 57.2, impedance: 512.3, final: null, checksum: null });
   assert.equal(parseAdvert(v20({ weight: 57.25, impedance: 0, twoDecimals: true })).weight, 57.25);
-  assert.equal(parseAdvert(v20({ weight: 57.2, impedance: 0, final: false })).final, false);
-  const bad = v20({ weight: 57.2, impedance: 5000 });
-  bad[0x20ca][12] ^= 0xff;
-  assert.equal(parseAdvert(bad).checksum, false);
+  // A status frame (properties bit0) carries no measurement: skipped.
+  assert.equal(parseAdvert(v20({ weight: 57.2, impedance: 0, status: true })), null);
+  // Nothing at [12] is verified: a frame with junk there still reads.
+  const junk = v20({ weight: 57.2, impedance: 5000 });
+  junk[0x20ca][12] = 0xff;
+  assert.equal(parseAdvert(junk).weight, 57.2);
 });
 
-test('C0 nameless adverts check the MAC and read decimals and units', () => {
+test('C0 adverts read decimals and units; the MAC no longer rejects them', () => {
   const d = fromHex('02 3c 01 f4 00 00 01 98 f6 7a 5e f9 9a'); // 57.2 kg, 500 ohm, final
   const r = parseAdvert({ [0x12c0]: d }, { mac: '98:F6:7A:5E:F9:9A' });
   assert.equal(r.format, 'C0');
   assert.equal(r.weight, 57.2);
   assert.equal(r.impedance, 500);
   assert.equal(r.final, true);
-  assert.equal(parseAdvert({ [0x12c0]: d }, { mac: '98:F6:7A:7C:FA:4B' }), null);
+  // A different Bluetooth address (or a scrambled frame MAC) must not
+  // starve the reading: Chipsea's app does not reject on it either.
+  assert.equal(parseAdvert({ [0x12c0]: d }, { mac: '98:F6:7A:7C:FA:4B' }).weight, 57.2);
   const lb = fromHex('04 e2 00 00 00 00 11 98 f6 7a 5e f9 9a'); // 125.0 lb
   assert.equal(parseAdvert({ [0x00c0]: lb }).weight, 56.7);
+});
+
+test('an encrypted V2 scale is reported as locked to its own app', () => {
+  const d = fromHex('02 3c 81 f4 00 00 01 98 f6 7a 5e f9 9a'); // bit7 of [2] set
+  const r = parseAdvert({ [0x12c0]: d });
+  assert.equal(r.format, 'V2');
+  assert.equal(r.encrypted, true);
+  assert.equal(r.weight, null);
 });
 
 test('V11 weight-only adverts', () => {
   const d = new Uint8Array(23);
   d[3] = 0x02; d[4] = 0x3c; d[9] = 0;
-  let sum = 0xca ^ 0x11;
-  for (let i = 0; i < 16; i++) sum ^= d[i];
-  d[16] = sum;
-  assert.deepEqual(parseAdvert({ [0x11ca]: d }), { format: 'V11', weight: 57.2, impedance: null, final: null, checksum: true });
+  assert.deepEqual(parseAdvert({ [0x11ca]: d }), { format: 'V11', weight: 57.2, impedance: null, final: null, checksum: null });
   assert.equal(parseAdvert({ [0x004c]: new Uint8Array(20) }), null);
 });
 
@@ -63,6 +71,7 @@ test('the settler waits for the final flag or a steady weight', () => {
   assert.equal(s.push({ weight: 50, final: false }, 0).settled, false);
   assert.equal(s.push({ weight: 57.2, final: true }, 100).settled, true);
   const t = createSettler({ holdMs: 2000 });
+  assert.equal(t.push({ weight: null, encrypted: true }, 0).settled, false);
   assert.equal(t.push({ weight: 57.2, final: null }, 0).settled, false);
   assert.equal(t.push({ weight: 57.2, final: null }, 1000).settled, false);
   assert.equal(t.push({ weight: 57.2, final: null }, 2100).settled, true);
