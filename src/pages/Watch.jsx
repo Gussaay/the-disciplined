@@ -199,6 +199,32 @@ export default function Watch() {
                 <HeartPulse size={18} /> {busy === 'heart' ? L('Measuring… keep the watch on', 'جارٍ القياس… أبقِ الساعة على معصمك') : L('Measure now', 'قِس الآن')}
               </button>
             )}
+            {s?.measureBp && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className="btn-soft !min-h-[44px] text-sm"
+                  disabled={live.status !== 'connected' || busy === 'bp'}
+                  onClick={() => act('bp', async () => {
+                    await s.measureBp();
+                    await new Promise((r) => setTimeout(r, 45000));
+                    await s.stopBp();
+                  }, L('Blood pressure saved from the watch', 'حُفظ الضغط من الساعة'))}
+                >
+                  {busy === 'bp' ? L('Measuring…', 'جارٍ القياس…') : L('Blood pressure', 'ضغط الدم')}
+                </button>
+                <button
+                  className="btn-soft !min-h-[44px] text-sm"
+                  disabled={live.status !== 'connected' || busy === 'spo2'}
+                  onClick={() => act('spo2', async () => {
+                    await s.measureSpo2();
+                    await new Promise((r) => setTimeout(r, 45000));
+                    await s.stopSpo2();
+                  }, L('Oxygen saved from the watch', 'حُفظ الأكسجين من الساعة'))}
+                >
+                  {busy === 'spo2' ? L('Measuring…', 'جارٍ القياس…') : L('Oxygen', 'الأكسجين')}
+                </button>
+              </div>
+            )}
             {s?.promptHeart && !s.canStartHeart() && wset.heartTried && (
               <p className="muted text-xs">
                 {L('This watch does not take a start order for heart rate from any app: it measures by itself every 10 minutes (saved here), live while its heart screen is open, and during a workout started on the watch. Measure now makes it buzz so you only tap the heart.', 'هذه الساعة لا تقبل أمر بدء قياس النبض من أي تطبيق: تقيس تلقائياً كل 10 دقائق (تُحفظ هنا)، ومباشرة عند فتح شاشة النبض، وأثناء تمرين تبدؤه من الساعة. زر "قِس الآن" يجعلها تهتز لتضغط على القلب فقط.')}{' '}
@@ -269,6 +295,59 @@ export default function Watch() {
                 >
                   {L('Send to the watch', 'أرسل إلى الساعة')}
                 </button>
+              </div>
+            </Section>
+          )}
+
+          {s?.setDrinkReminder && (
+            <Section title={L('More watch features', 'مزايا إضافية للساعة')}>
+              <div className="card space-y-3">
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Drink water reminder', 'تذكير شرب الماء')}</span>
+                  <select className="input !w-32" value={wset.drinkMinutes ?? 60} onChange={(e) => setWset({ ...wset, drinkMinutes: Number(e.target.value) })}>
+                    {[30, 45, 60, 90, 120].map((v) => <option key={v} value={v}>{L(`every ${v} min`, `كل ${v} دقيقة`)}</option>)}
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected' || busy === 'drink'} onClick={() => act('drink', () => s.setDrinkReminder({ on: true, minutes: wset.drinkMinutes ?? 60 }), L('Reminder set on the watch', 'ضُبط التذكير على الساعة'))}>
+                    {L('Turn on', 'تشغيل')}
+                  </button>
+                  <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected' || busy === 'drink'} onClick={() => act('drink', () => s.setDrinkReminder({ on: false, minutes: wset.drinkMinutes ?? 60 }), L('Reminder off', 'أُوقف التذكير'))}>
+                    {L('Turn off', 'إيقاف')}
+                  </button>
+                </div>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold">{L('Watch alarm', 'منبه الساعة')}</span>
+                  <span className="flex items-center gap-2">
+                    <input type="time" className="input !w-28" value={wset.alarmTime ?? '07:00'} onChange={(e) => setWset({ ...wset, alarmTime: e.target.value })} />
+                    <input type="checkbox" className="h-5 w-5" checked={wset.alarmOn ?? false} onChange={(e) => setWset({ ...wset, alarmOn: e.target.checked })} />
+                  </span>
+                </label>
+                <button
+                  className="btn-soft w-full !min-h-[44px] text-sm"
+                  disabled={live.status !== 'connected' || busy === 'alarm'}
+                  onClick={() => act('alarm', () => {
+                    const [h, m] = String(wset.alarmTime ?? '07:00').split(':').map(Number);
+                    return s.setAlarm({ on: wset.alarmOn ?? false, hour: h || 0, minute: m || 0 });
+                  }, L('Alarm sent to the watch', 'أُرسل المنبه إلى الساعة'))}
+                >
+                  {L('Send alarm', 'أرسل المنبه')}
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button className="btn-soft !min-h-[44px] text-sm" disabled={live.status !== 'connected' || busy === 'shake'} onClick={() => act('shake', () => s.setShakePhoto(true), L('Shake to take a photo is on', 'الاهتزاز للتصوير يعمل'))}>
+                    {L('Shake for photo', 'اهتزاز للصورة')}
+                  </button>
+                  <button
+                    className="btn-soft !min-h-[44px] text-sm text-red-600"
+                    disabled={live.status !== 'connected' || busy === 'restart'}
+                    onClick={async () => {
+                      if (!(await confirm({ title: L('Restart the watch?', 'إعادة تشغيل الساعة؟'), body: L('The watch turns off and on again.', 'تنطفئ الساعة وتعمل من جديد.'), yes: L('Restart', 'إعادة التشغيل') }))) return;
+                      await act('restart', () => s.restartWatch(), L('Restart sent', 'أُرسلت إعادة التشغيل'));
+                    }}
+                  >
+                    {L('Restart watch', 'إعادة تشغيل الساعة')}
+                  </button>
+                </div>
               </div>
             </Section>
           )}

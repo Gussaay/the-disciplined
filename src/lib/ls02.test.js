@@ -1,10 +1,39 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isLs02, LS02, ls02Alert, ls02Cmd, parseLs02 } from './ls02.js';
+import { HEART_CANDIDATES, isLs02, LS02, ls02Alert, ls02Cmd, parseLs02 } from './ls02.js';
 
 test('commands', () => {
   assert.deepEqual(ls02Cmd.time(new Date(2024, 4, 10, 14, 30, 0)), [0x04, 0x07, 0xe8, 5, 10, 14, 30, 0]);
   assert.deepEqual(ls02Cmd.user({ sex: 'male', age: 30, height: 175, weight: 70, stepGoal: 8000 }), [5, 0, 175, 0, 70, 10, 0, 0, 0x1f, 0x40, 1, 0xa0, 0, 30, 1, 0, 1, 1, 0x28]);
+  // The orders the watch's own app (GloryFit) sends, byte for byte.
+  assert.deepEqual(ls02Cmd.heartStart(), [0xe5, 0x11]);
+  assert.deepEqual(ls02Cmd.heartStop(), [0xe5, 0x00]);
+  assert.deepEqual(ls02Cmd.bpStart(), [0xc7, 0x11]);
+  assert.deepEqual(ls02Cmd.bpStop(), [0xc7, 0x00]);
+  assert.deepEqual(ls02Cmd.spo2Start(), [0x34, 0x11]);
+  assert.deepEqual(ls02Cmd.heartAutoOn(), [0xf7, 0x01]);
+  assert.deepEqual(ls02Cmd.heartAutoOff(), [0xf7, 0x02]);
+  assert.deepEqual(ls02Cmd.findBand(), [0xab, 0, 0, 0, 1, 3, 7, 1]);
+  // The exact GloryFit start order is the first candidate tried.
+  assert.deepEqual(HEART_CANDIDATES[0], ['general', [0xe5, 0x11]]);
+  // The rest of GloryFit's orders, byte for byte.
+  assert.deepEqual(ls02Cmd.spo2Stop(), [0x34, 0x00]);
+  assert.deepEqual(ls02Cmd.heartTimed({ on: true, minutes: 30 }), [0xf7, 0x09, 1, 0, 30]);
+  assert.deepEqual(ls02Cmd.heartTimed({ on: false, minutes: 60 }), [0xf7, 0x09, 0, 0, 60]);
+  assert.deepEqual(ls02Cmd.drinkReminder({ on: true, minutes: 60 }), [0xdc, 1, 60, 2, 3, 1, 0, 8, 0, 22, 0, 0]);
+  assert.deepEqual(ls02Cmd.shakePhotoOn(), [0xc4, 0x01]);
+  assert.deepEqual(ls02Cmd.shakePhotoOff(), [0xc4, 0x03]);
+  assert.deepEqual(ls02Cmd.language(2), [0xaf, 0xab, 2]);
+  assert.deepEqual(ls02Cmd.restart(), [0xe8, 0x12]);
+  assert.deepEqual(ls02Cmd.factoryReset(), [0xad]);
+  assert.deepEqual(ls02Cmd.alarm({ on: true, hour: 7, minute: 30 }), [0xab, 62, 7, 30, 2, 0, 2, 0, 0]);
+  assert.deepEqual(ls02Cmd.alarm({ on: false, hour: 7, minute: 30 }), [0xab, 62, 7, 30, 0, 0, 0, 0, 0]);
+  assert.deepEqual(ls02Cmd.disturb({ switches: 4, fromHour: 22, toHour: 7 }), [0xd7, 4, 22, 0, 7, 0, 0]);
+  // Blood pressure and oxygen replies, in GloryFit's layout.
+  assert.deepEqual(parseLs02([0xc7, 0x11, 0, 120, 80]), { type: 'bp', systolic: 120, diastolic: 80 });
+  assert.equal(parseLs02([0xc7, 0x11, 0, 40, 80]), null);
+  assert.deepEqual(parseLs02([0x34, 0x11, 0, 98]), { type: 'spo2', spo2: 98 });
+  assert.equal(parseLs02([0x34, 0x11, 0, 30]), null);
   assert.equal(isLs02([LS02.general, LS02.data]), true);
 });
 

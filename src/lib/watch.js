@@ -154,9 +154,11 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       await sendGeneral(packet).catch((e) => note(`send: ${e?.message || e}`));
       await sleep(250);
     }
-    // Keep the watch's own heart monitoring on (a reading every 10 minutes)
-    // and ask for today's heart history.
-    await sendData(ls02Cmd.heartOn());
+    // Keep the watch's own heart monitoring on (a reading every 10 minutes),
+    // switched on the way the watch's own app (GloryFit) does it: F7 01 on
+    // the general channel. The 18 01 order on the data channel came from a
+    // different watch and this one ignores it. Then ask for heart history.
+    await sendGeneral(ls02Cmd.heartAutoOn()).catch((e) => note(`heart auto: ${e?.message || e}`));
     await sleep(200);
     await sendData(ls02Cmd.heartAll());
     await sleep(1500);
@@ -187,11 +189,25 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       measureHeart: async () => {
         if (framed) return sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x01]));
         if (heartCmd) return sendOn(heartCmd[0], heartCmd[1]);
-        // No start command known: keep monitoring on and ask for the latest.
-        await sendData(ls02Cmd.heartOn());
-        return sendData(ls02Cmd.heartAll());
+        // The start order the watch's own app (GloryFit) sends: E5 11 on
+        // the general channel. Readings come back as E5 frames, which
+        // parseLs02 already understands.
+        return sendGeneral(ls02Cmd.heartStart());
       },
-      canStartHeart: () => Boolean(framed || heartCmd),
+      // Blood pressure and oxygen, started and stopped the GloryFit way.
+      measureBp: () => (framed ? Promise.reject(new Error('fitpro-bp')) : sendGeneral(ls02Cmd.bpStart())),
+      stopBp: () => sendGeneral(ls02Cmd.bpStop()).catch(() => {}),
+      measureSpo2: () => (framed ? Promise.reject(new Error('fitpro-spo2')) : sendGeneral(ls02Cmd.spo2Start())),
+      stopSpo2: () => sendGeneral(ls02Cmd.spo2Stop()).catch(() => {}),
+      // The rest of GloryFit's orders, on the same channel.
+      setDrinkReminder: (opts) => sendGeneral(ls02Cmd.drinkReminder(opts)),
+      setAlarm: (opts) => sendGeneral(ls02Cmd.alarm(opts)),
+      setShakePhoto: (on) => sendGeneral(on ? ls02Cmd.shakePhotoOn() : ls02Cmd.shakePhotoOff()),
+      setLanguage: (n) => sendGeneral(ls02Cmd.language(n)),
+      restartWatch: () => sendGeneral(ls02Cmd.restart()),
+      // E5 11 above is the vendor order for this watch family, so the app
+      // can start a measurement itself (no buzz-and-tap needed).
+      canStartHeart: () => true,
       /**
        * Tries the candidate start commands one by one (the watch must be on
        * the wrist, its heart screen closed). Resolves to the command that made
@@ -217,12 +233,17 @@ export async function connectWatch({ id }, { profile = {}, watchSettings = {}, o
       },
       stopHeart: async () => {
         if (framed) return sendGeneral(craft(GROUP.general, CMD.hrMeasure, [0x00]));
-        if (heartCmd) await sendGeneral([0xe5, 0x00]).catch(() => {});
+        // E5 00 stops the measurement, as in the watch's own app.
+        await sendGeneral(ls02Cmd.heartStop()).catch(() => {});
         return sendData(ls02Cmd.heartAll());
       },
       settings: true,
       applySettings: (next) => sendGeneral(ls02Cmd.user({ ...profileNow, ...next }, next)),
-      findWatch: () => (framed ? sendGeneral(craft(GROUP.general, CMD.findBand, [0x01])) : alert('Here I am!')),
+      findWatch: () => (framed
+        ? sendGeneral(craft(GROUP.general, CMD.findBand, [0x01]))
+        // The find order the watch's own app sends (AB ...); if the watch
+        // refuses it, fall back to buzzing it with a message.
+        : sendGeneral(ls02Cmd.findBand()).catch(() => alert('Here I am!'))),
       refresh,
       syncTime: () => (framed ? sendGeneral(initSequence(profileNow)[1]) : sendGeneral(ls02Cmd.time())),
       disconnect: () => BleClient.disconnect(id).catch(() => {}),

@@ -29,6 +29,53 @@ export const ls02Cmd = {
   heartOn: () => [0x18, 0x01],
   heartOff: () => [0x18, 0x02],
   heartAll: () => [0x18, 0xfa],
+  // The orders the watch's own app (GloryFit) sends, taken from that app:
+  // two-byte health orders on the general channel, 0x11 starts a measurement
+  // and 0x00 stops it. E5 is heart rate, C7 blood pressure, 34 oxygen.
+  heartStart: () => [0xe5, 0x11],
+  heartStop: () => [0xe5, 0x00],
+  bpStart: () => [0xc7, 0x11],
+  bpStop: () => [0xc7, 0x00],
+  spo2Start: () => [0x34, 0x11],
+  spo2Stop: () => [0x34, 0x00],
+  // Timed heart test on the F7 family: F7 09, on/off, interval in minutes
+  // (two bytes). The watch then measures by itself at that interval.
+  heartTimed: ({ on = true, minutes = 30 } = {}) => {
+    const m = Math.max(1, Math.min(0xffff, Math.round(Number(minutes) || 30)));
+    return [0xf7, 0x09, on ? 1 : 0, (m >> 8) & 0xff, m & 0xff];
+  },
+  // Drink-water reminder: DC, on/off, interval minutes, the fixed fields
+  // GloryFit sends (2, 3, 1, 0), start and end time, lunch-break switch.
+  drinkReminder: ({ on = true, minutes = 60, fromHour = 8, fromMinute = 0, toHour = 22, toMinute = 0, lunchBreak = false } = {}) => [
+    0xdc, on ? 1 : 0, Math.round(Number(minutes) || 60) & 0xff, 2, 3, 1, 0,
+    Number(fromHour) & 0xff, Number(fromMinute) & 0xff, Number(toHour) & 0xff, Number(toMinute) & 0xff, lunchBreak ? 1 : 0,
+  ],
+  // Shake the watch to take a photo on the phone (GloryFit's camera mode).
+  shakePhotoOn: () => [0xc4, 0x01],
+  shakePhotoOff: () => [0xc4, 0x03],
+  // The watch's display language, by its number in the watch's list.
+  language: (n = 0) => [0xaf, 0xab, Number(n) & 0xff],
+  // Restart the watch, and wipe it back to factory state (GloryFit's orders).
+  restart: () => [0xe8, 0x12],
+  factoryReset: () => [0xad],
+  // One alarm in the first slot, GloryFit's AB order: cycle is a weekday
+  // bitmask (62 = the value GloryFit itself substitutes for a plain alarm).
+  alarm: ({ on = true, hour = 7, minute = 0, cycle = 62, shake = 0 } = {}) => (on
+    ? [0xab, cycle & 0xff, Number(hour) & 0xff, Number(minute) & 0xff, 2, Number(shake) & 0xff, 2, 0, 0]
+    : [0xab, cycle & 0xff, Number(hour) & 0xff, Number(minute) & 0xff, 0, 0, 0, 0, 0]),
+  // Do not disturb: D7, a packed switch byte, start and end time, and a
+  // final switch. GloryFit packs four switches into the byte (x8, x4, x2,
+  // x1); which of them is the master switch differs between its screens,
+  // so the caller passes the packed byte it wants.
+  disturb: ({ switches = 0, fromHour = 22, fromMinute = 0, toHour = 7, toMinute = 0, extra = false } = {}) => [
+    0xd7, Number(switches) & 0xff, Number(fromHour) & 0xff, Number(fromMinute) & 0xff, Number(toHour) & 0xff, Number(toMinute) & 0xff, extra ? 1 : 0,
+  ],
+  // All-day heart monitoring on/off (the watch then sends an F7 03 reading
+  // every 10 minutes, which parseLs02 already understands).
+  heartAutoOn: () => [0xf7, 0x01],
+  heartAutoOff: () => [0xf7, 0x02],
+  // Find the watch: AB, three zero fields, 1, how often it vibrates, 7, 1.
+  findBand: (repeats = 3) => [0xab, 0, 0, 0, 1, repeats & 0xff, 7, 1],
   firmware: () => [0xa1],
   // Metric units and the 24-hour clock; the watch echoes it back.
   format: () => [0x01, 0x01, 0x01],
@@ -72,11 +119,14 @@ export const SPORTS = {
 };
 
 /**
- * Commands that may start a heart measurement on these watches; none is
- * documented. The app tries them one at a time and keeps the one the watch
- * answers with heart readings. Only heart-rate ids (E5, 18) are tried.
+ * Commands that may start a heart measurement on these watches. The first
+ * is the exact order the watch's own app (GloryFit) sends - E5 11, two
+ * bytes, on the general channel; the three-byte variant tried before was a
+ * guess and this firmware ignores it. The rest are fallbacks: the app tries
+ * them one at a time and keeps the one the watch answers with readings.
  */
 export const HEART_CANDIDATES = [
+  ['general', [0xe5, 0x11]],
   ['general', [0xe5, 0x11, 0x01]],
   ['general', [0xe5, 0x01]],
   ['general', [0xe5, 0x11, 0x00, 0x01]],
@@ -134,6 +184,21 @@ export function parseLs02(p, { now = new Date(), steps = new Map() } = {}) {
     return { type: 'heartHistory', points };
   }
   if ((id === 0x18) && (p[1] === 0x01 || p[1] === 0x02 || p[1] === 0xfd)) return { type: 'ack', what: 'heart' };
+  // A blood-pressure measurement reporting (C7): systolic at byte 3 and
+  // diastolic at byte 4, the layout GloryFit reads.
+  if (id === 0xc7 && p.length >= 5) {
+    const systolic = p[3];
+    const diastolic = p[4];
+    if (systolic > 50 && systolic < 260 && diastolic > 25 && diastolic < 200 && systolic > diastolic) {
+      return { type: 'bp', systolic, diastolic };
+    }
+    return null;
+  }
+  // An oxygen measurement reporting (34): the value at byte 3.
+  if (id === 0x34 && p.length >= 4) {
+    const spo2 = p[3];
+    return spo2 >= 60 && spo2 <= 100 ? { type: 'spo2', spo2 } : null;
+  }
   if ((id === 0xb2 || id === 0x0a) && p[1] === 0xfd) return { type: 'day', steps: [...steps.values()].reduce((a, b) => a + b, 0) };
   if ((id === 0xb2 || id === 0x0a) && p.length >= 8 && p[1] === 0x07) {
     if (sameDay(p, 1, now)) steps.set(p[5], u16(p, 6));

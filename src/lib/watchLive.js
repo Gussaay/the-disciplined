@@ -71,6 +71,8 @@ export async function link(watch, profile) {
           }
         }
         if (e.type === 'day') saveDay({ steps: e.steps, distance: e.distance, kcal: e.kcal });
+        if (e.type === 'bp') saveDay({ systolic: e.systolic, diastolic: e.diastolic });
+        if (e.type === 'spo2') saveDay({ spo2: e.spo2 });
         if (e.type === 'heart' && e.bpm) {
           set({ heart: { ...e, at: Date.now() } });
           if (live.sport) live.sport.bpm.push(e.bpm);
