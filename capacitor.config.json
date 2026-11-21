@@ -28,7 +28,7 @@
     "CapacitorUpdater": {
       "autoUpdate": false,
       "appReadyTimeout": 15000,
-      "responseTimeout": 30,
+      "responseTimeout": 120,
       "resetWhenUpdate": true,
       "keepUrlPathAfterReload": true,
       "autoDeleteFailed": true,

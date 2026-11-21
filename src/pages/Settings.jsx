@@ -289,6 +289,9 @@ function AppUpdates() {
           )}
         </p>
       )}
+      <button className="btn-soft w-full" onClick={() => openUrl(u.latestApk?.apkUrl || APK_LATEST_URL)}>
+        <Download size={18} /> {L('Download the newest APK manually', 'نزّل أحدث APK يدوياً')}
+      </button>
       {!u.apk && (
         <details className="text-sm">
           <summary className="muted cursor-pointer">{L('Reinstall the newest APK', 'أعد تثبيت أحدث APK')}</summary>

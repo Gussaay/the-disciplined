@@ -16,6 +16,11 @@
 // native side last changed (or when the native fingerprint matches). Web code
 // that calls a plugin the installed APK lacks would crash on start.
 import { App as CapApp } from '@capacitor/app';
+// The updater plugin is imported with the app, not loaded lazily when a
+// check runs: the lazy load stalled on a real phone (the check died with
+// "updater did not answer" before it even looked for an update, every time),
+// while the app itself - this file included - had loaded fine.
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { isNative } from './native';
 import { UPDATE_SITE } from '../config';
 import { bundleFits, newerApk } from './updateRules';
@@ -61,10 +66,24 @@ async function getJson(path) {
 const withTimeout = (promise, ms, what) =>
   Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(`${what} did not answer`)), ms))]);
 
-let updater = null;
-async function getUpdater() {
-  if (!updater) updater = (await import('@capgo/capacitor-updater')).CapacitorUpdater;
-  return updater;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Runs `fn` until it answers, up to `times` tries with a growing pause.
+ * Every step that can stall is retried before the check gives up: one
+ * stalled call used to fail the whole check for the rest of the session.
+ */
+async function tryTimes(times, fn) {
+  let last;
+  for (let i = 0; i < times; i += 1) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (i < times - 1) await sleep(1500 * (i + 1));
+    }
+  }
+  throw last;
 }
 
 let checking = false;
@@ -77,20 +96,30 @@ export async function checkForUpdates() {
   checking = true;
   set({ checking: true, error: null });
   try {
-    // Every plugin call has a time limit: one call that never answered left
-    // the check spinning forever, so no update was ever looked for again.
-    const info = await withTimeout(CapApp.getInfo(), 5000, 'app info');
+    // Every plugin call has a time limit and is retried: one call that
+    // never answered used to fail the whole check, so no update was ever
+    // looked for again.
+    const info = await tryTimes(2, () => withTimeout(CapApp.getInfo(), 8000, 'app info'));
     set({ native: { version: info.version, build: info.build }, bundle: state.bundle || info.version });
-    const U = await withTimeout(getUpdater(), 8000, 'updater');
-    const current = await withTimeout(U.current(), 5000, 'current bundle').catch(() => null);
-    const running = current?.bundle?.version && current.bundle.version !== 'builtin' ? current.bundle.version : info.version;
-    set({ native: { version: info.version, build: info.build }, bundle: running });
 
+    // The manifests are plain web fetches, so they are read BEFORE anything
+    // touches the updater plugin: even if the plugin stalls, the page can
+    // still offer the newest APK and its manual download link.
     const [apk, manifest] = await Promise.all([
       getJson('/native-version.json').catch(() => null),
       getJson('/latest/update.json').catch(() => null),
     ]);
     if (!apk && !manifest) throw new Error('The update site did not answer');
+
+    // Which bundle is running? The APK's own version is the fallback when
+    // the plugin does not answer; that can only delay an update, never
+    // install a wrong one, because the fit test below still applies.
+    let running = info.version;
+    try {
+      const current = await tryTimes(2, () => withTimeout(CapacitorUpdater.current(), 10000, 'current bundle'));
+      if (current?.bundle?.version && current.bundle.version !== 'builtin') running = current.bundle.version;
+    } catch { /* keep the APK version */ }
+    set({ native: { version: info.version, build: info.build }, bundle: running });
 
     // As in Easy Pedia: the APK is offered only when this one is too old for
     // the over-the-air update; otherwise every build would ask for an install.
@@ -105,10 +134,13 @@ export async function checkForUpdates() {
     });
     if (fit === 'install' && state.ready !== manifest.version) {
       set({ downloading: true });
-      const { bundles = [] } = await withTimeout(U.list(), 5000, 'list').catch(() => ({ bundles: [] }));
-      let bundle = bundles.find((b) => b.version === manifest.version && b.status !== 'error');
-      if (!bundle) bundle = await withTimeout(U.download({ url: manifest.url, version: manifest.version, checksum: manifest.checksum }), 120_000, 'download');
-      await withTimeout(U.next({ id: bundle.id }), 5000, 'next');
+      const bundle = await tryTimes(2, async () => {
+        const { bundles = [] } = await withTimeout(CapacitorUpdater.list(), 10000, 'list').catch(() => ({ bundles: [] }));
+        let found = bundles.find((b) => b.version === manifest.version && b.status !== 'error');
+        if (!found) found = await withTimeout(CapacitorUpdater.download({ url: manifest.url, version: manifest.version, checksum: manifest.checksum }), 180_000, 'download');
+        await withTimeout(CapacitorUpdater.next({ id: found.id }), 10000, 'next');
+        return found;
+      });
       set({ ready: manifest.version, downloading: false, readyId: bundle.id, notes: manifest.notes || null });
       notifyOnce(`ota-${manifest.version}`, {
         title: 'Update downloaded',
@@ -130,8 +162,7 @@ export async function checkForUpdates() {
 /** Switches to the downloaded web bundle now (the app reloads). */
 export async function restartIntoUpdate() {
   if (!state.readyId) return;
-  const U = await getUpdater();
-  await U.set({ id: state.readyId });
+  await CapacitorUpdater.set({ id: state.readyId });
 }
 
 /** A phone notification about an update, shown once per version. */
@@ -160,7 +191,7 @@ export function startUpdates() {
   started = true;
   // Without this on every start, the updater thinks the new bundle is broken
   // and goes back to the previous one.
-  getUpdater().then((U) => withTimeout(U.notifyAppReady(), 5000, 'ready')).catch(() => {});
+  withTimeout(CapacitorUpdater.notifyAppReady(), 10000, 'ready').catch(() => {});
   setTimeout(checkForUpdates, 3000);
   // Android keeps the app in memory for days, so "next start" can be far
   // away: check whenever the person comes back, and apply a downloaded
