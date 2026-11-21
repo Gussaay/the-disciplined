@@ -10,16 +10,21 @@ import { customExercise } from '../lib/gymSession';
 import { AiSetupNote, PhotoButton, useAiError } from './Ai';
 import { Sheet, useToast } from './ui';
 import ExerciseGuide from './ExerciseGuide';
+import ToolDashboard from './ToolDashboard';
 import { PHOTOS, REGIONS, targetsOf } from '../data/exerciseGuide';
+import { TOOL_PHOTOS } from '../data/toolPhotos';
 import { useStore } from '../hooks/useStore';
 import { shrinkImage } from '../lib/image';
 
 const NONE = {};
+const EMPTY = [];
 
 /** The photo of a machine: the one taken at the gym, or the built-in one. */
 export function useMachinePhotos() {
   const [own, setOwn] = useStore('gymPhotos', NONE);
-  const photoOf = (id) => own[id] || PHOTOS[id]?.photo || PHOTOS[id]?.label || null;
+  // The person's own photo of the machine wins, then the gym's photo, then
+  // the standard catalogue photo every tool now has, then the label photo.
+  const photoOf = (id) => own[id] || PHOTOS[id]?.photo || TOOL_PHOTOS[id] || PHOTOS[id]?.label || null;
   return { own, setOwn, photoOf };
 }
 
@@ -65,6 +70,8 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
   const toast = useToast();
   const aiError = useAiError();
   const [equipmentId, setEquipmentId] = useState(null);
+  const [muscleFilter, setMuscleFilter] = useState('all');
+  const [sessions] = useStore('gymSessions', EMPTY);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState(null); // AI answer for equipment not in the catalogue
   const [busy, setBusy] = useState(false);
@@ -173,6 +180,7 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
             </button>
           )}
           <h3 className="text-lg font-extrabold"><span aria-hidden>{equipment.icon}</span> {pick(equipment.name)}</h3>
+          <ToolDashboard equipment={equipment} sessions={sessions} />
           {PHOTOS[equipment.id]?.label && PHOTOS[equipment.id].label !== photoOf(equipment.id) && (
             <button className="flex w-full items-center gap-3 rounded-2xl bg-brand-50/70 p-2 text-start text-sm dark:bg-white/5" onClick={() => setZoom(PHOTOS[equipment.id].label)}>
               <img src={PHOTOS[equipment.id].label} alt="" className="h-14 w-20 rounded-lg object-cover" />
@@ -200,19 +208,35 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
         </>
       ) : (
         !found?.exercises?.length && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {[...EQUIPMENT].sort((a, b) => Boolean(photoOf(b.id)) - Boolean(photoOf(a.id))).map((e) => (
-              <button key={e.id} className="card flex flex-col items-start gap-1 overflow-hidden !p-0 text-start active:scale-[0.98]" onClick={() => setEquipmentId(e.id)}>
-                {photoOf(e.id) ? (
-                  <img src={photoOf(e.id)} alt="" loading="lazy" className="h-28 w-full object-cover" />
-                ) : (
-                  <span className="flex h-28 w-full items-center justify-center bg-brand-50/70 text-5xl dark:bg-white/5" aria-hidden>{e.icon}</span>
-                )}
-                <span className="px-3 pt-1 font-bold leading-tight">{pick(e.name)}</span>
-                <span className="muted px-3 pb-3 text-xs">{L(`${e.exercises.length} exercises`, `${e.exercises.length} تمارين`)}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {['all', ...Object.keys(MUSCLES)].map((m) => (
+                <button
+                  key={m}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold ${muscleFilter === m ? 'bg-brand-600 text-white' : 'bg-brand-50/70 dark:bg-white/5'}`}
+                  onClick={() => setMuscleFilter(m)}
+                >
+                  {m === 'all' ? L('All tools', 'كل الأجهزة') : pick(MUSCLES[m])}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {EQUIPMENT.filter((e) => muscleFilter === 'all' || e.exercises.some((x) => x.muscle === muscleFilter)).map((e) => (
+                <button key={e.id} className="card flex flex-col items-start gap-1 overflow-hidden !p-0 text-start active:scale-[0.98]" onClick={() => setEquipmentId(e.id)}>
+                  {photoOf(e.id) ? (
+                    <img src={photoOf(e.id)} alt="" loading="lazy" className="h-28 w-full object-cover" />
+                  ) : (
+                    <span className="flex h-28 w-full items-center justify-center bg-brand-50/70 text-5xl dark:bg-white/5" aria-hidden>{e.icon}</span>
+                  )}
+                  <span className="px-3 pt-1 font-bold leading-tight">{pick(e.name)}</span>
+                  <span className="muted px-3 text-xs">
+                    {[...new Set(e.exercises.map((x) => x.muscle))].slice(0, 3).map((m) => (MUSCLES[m] ? pick(MUSCLES[m]) : m)).join(L(' · ', ' · '))}
+                  </span>
+                  <span className="muted px-3 pb-3 text-xs">{L(`${e.exercises.length} exercises`, `${e.exercises.length} تمارين`)}</span>
+                </button>
+              ))}
+            </div>
+          </>
         )
       )}
     </div>

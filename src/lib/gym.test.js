@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dailyTotals, isRecord, lastPerformance, nextTarget, oneRepMax, personalRecords, sessionVolume, estimateBurn } from './gym.js';
+import { dailyTotals, isRecord, lastPerformance, nextTarget, oneRepMax, personalRecords, sessionVolume, estimateBurn, toolStats } from './gym.js';
 
 const set = (weight, reps, done = true) => ({ weight, reps, done });
 const session = (id, date, startedAt, sets) => ({
@@ -104,4 +104,29 @@ test('health readings are totalled; the newest weight wins', () => {
     weight: [{ value: 80.04, startDate: '2026-01-01' }, { value: 79.26, startDate: '2026-02-01' }],
   });
   assert.deepEqual(s, { steps: 6500, calories: 0, km: 3.21, hrAvg: 80, hrMax: 100, weight: 79.3 });
+});
+
+test('toolStats: totals for one tool across sessions, cardio counted in minutes and km', () => {
+  const sessions = [
+    { id: 'a', date: '2026-11-10', startedAt: 100, endedAt: 200, exercises: [
+      { exerciseId: 'bench_press', unit: 'kg', sets: [{ reps: 10, weight: 60, done: true }, { reps: 8, weight: 60, done: true }, { reps: 5, weight: 100, done: false }] },
+      { exerciseId: 'squat', unit: 'kg', sets: [{ reps: 5, weight: 100, done: true }] },
+    ] },
+    { id: 'b', date: '2026-11-17', startedAt: 300, endedAt: 400, exercises: [
+      { exerciseId: 'bench_press', unit: 'kg', sets: [{ reps: 10, weight: 65, done: true }] },
+      { exerciseId: 'treadmill_run', unit: 'cardio', sets: [{ minutes: 20, km: 3.5, done: true }] },
+    ] },
+  ];
+  const t = toolStats(sessions, ['bench_press', 'incline_bench']);
+  assert.equal(t.sessions, 2);
+  assert.equal(t.sets, 3);
+  assert.equal(t.volume, 60 * 10 + 60 * 8 + 65 * 10);
+  assert.equal(t.lastDate, '2026-11-17');
+  assert.equal(t.perExercise.bench_press.sets, 3);
+  assert.equal(t.perExercise.bench_press.lastDate, '2026-11-17');
+  const c = toolStats(sessions, ['treadmill_run']);
+  assert.equal(c.sessions, 1);
+  assert.equal(c.minutes, 20);
+  assert.equal(c.km, 3.5);
+  assert.deepEqual(toolStats([], ['x']), { sessions: 0, sets: 0, volume: 0, minutes: 0, km: 0, lastDate: null, perExercise: {} });
 });

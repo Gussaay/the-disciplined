@@ -115,6 +115,42 @@ export function estimateBurn(session, weightKg = 70) {
   return Math.round((met * 3.5 * weightKg) / 200 * minutes);
 }
 
+/**
+ * Everything one tool's dashboard shows: how much the tool has been used,
+ * and the totals per exercise on it. `exerciseIds` are the tool's catalogue
+ * exercises. Cardio work counts minutes and kilometres instead of weight.
+ */
+export function toolStats(sessions, exerciseIds) {
+  const ids = new Set(exerciseIds || []);
+  const out = { sessions: 0, sets: 0, volume: 0, minutes: 0, km: 0, lastDate: null, perExercise: {} };
+  let lastAt = 0;
+  for (const s of sessions || []) {
+    let used = false;
+    for (const e of s.exercises || []) {
+      if (!ids.has(e.exerciseId)) continue;
+      const done = doneSets(e);
+      if (!done.length) continue;
+      used = true;
+      const p = (out.perExercise[e.exerciseId] ||= { sets: 0, volume: 0, minutes: 0, km: 0, lastDate: null });
+      for (const set of done) {
+        const v = n(set.weight) * n(set.reps);
+        out.sets += 1; p.sets += 1;
+        out.volume += v; p.volume += v;
+        out.minutes += n(set.minutes); p.minutes += n(set.minutes);
+        out.km += n(set.km); p.km += n(set.km);
+      }
+      p.lastDate = s.date;
+    }
+    if (used) {
+      out.sessions += 1;
+      if ((s.startedAt || 0) >= lastAt) { lastAt = s.startedAt || 0; out.lastDate = s.date; }
+    }
+  }
+  out.km = Math.round(out.km * 10) / 10;
+  for (const p of Object.values(out.perExercise)) p.km = Math.round(p.km * 10) / 10;
+  return out;
+}
+
 /** Share of finished sets per muscle group over the given sessions. */
 export function muscleBalance(sessions, exerciseIndex) {
   const out = {};
