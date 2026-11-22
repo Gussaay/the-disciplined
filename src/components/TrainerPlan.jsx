@@ -1,16 +1,20 @@
 // The trainer's diet table on the Food page: four meals a day, one option
-// chosen from each, and a tick when the meal is eaten. Choices and ticks
-// are kept per day on this device (store key `trainerPlan`).
+// chosen from each, and a tick when the meal is eaten. Choosing an option
+// also writes its foods — with their amounts and calories — into today's
+// food log (through `onLogMeal`), so the day's totals follow the plan;
+// choosing another option replaces them, and tapping the chosen one again
+// takes them back out. Choices and ticks are kept per day on this device
+// (store key `trainerPlan`).
 import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
-import { TRAINER_PLAN } from '../data/trainerPlan';
+import { TRAINER_PLAN, optionItems, optionKcal } from '../data/trainerPlan';
 import { dayKey } from '../lib/dates';
 
 const NONE = {};
 
-export default function TrainerPlan() {
+export default function TrainerPlan({ onLogMeal }) {
   const { L, pick, num } = useLang();
   const [days, setDays] = useStore('trainerPlan', NONE);
   const today = dayKey();
@@ -20,8 +24,19 @@ export default function TrainerPlan() {
   const [openMeal, setOpenMeal] = useState(() => (TRAINER_PLAN.meals.find((m) => picks[m.id] === undefined) || {}).id ?? null);
 
   const save = (next) => setDays({ ...days, [today]: next });
-  const choose = (mealId, i) => {
-    save({ ...day, picks: { ...picks, [mealId]: i } });
+  const choose = (meal, i) => {
+    if (picks[meal.id] === i) {
+      // Tapping the chosen option again clears it and its logged foods.
+      const nextPicks = { ...picks };
+      delete nextPicks[meal.id];
+      const nextDone = { ...done };
+      delete nextDone[meal.id];
+      save({ ...day, picks: nextPicks, done: nextDone });
+      onLogMeal?.(meal.id, null);
+      return;
+    }
+    save({ ...day, picks: { ...picks, [meal.id]: i } });
+    onLogMeal?.(meal.id, optionItems(meal.options[i]));
     setOpenMeal(null);
   };
   const toggleDone = (mealId) => save({ ...day, done: { ...done, [mealId]: !done[mealId] } });
@@ -36,7 +51,7 @@ export default function TrainerPlan() {
         </p>
       </div>
       <p className="muted -mt-1 text-sm">
-        {L('Gain weight as muscle: four home meals a day. Choose one option from each meal and tick it when eaten.', 'زيادة الوزن بالكتلة العضلية: 4 وجبات منزلية يومياً. اختر وجبة واحدة من كل قسم وعلّم عليها بعد الأكل.')}
+        {L('Gain weight as muscle: four home meals a day. Choose one option from each meal and it is written into your log with its amounts; tick it when eaten.', 'زيادة الوزن بالكتلة العضلية: 4 وجبات منزلية يومياً. اختر وجبة واحدة من كل قسم فتنزل في سجلك بكمياتها، وعلّم عليها بعد الأكل.')}
       </p>
 
       {TRAINER_PLAN.meals.map((meal) => {
@@ -69,7 +84,7 @@ export default function TrainerPlan() {
                 {meal.options.map((option, i) => (
                   <button
                     key={i}
-                    onClick={() => choose(meal.id, i)}
+                    onClick={() => choose(meal, i)}
                     aria-pressed={chosen === i}
                     className={`flex w-full items-start gap-2 rounded-xl px-2 py-2 text-start text-sm ${chosen === i ? 'bg-brand-50 font-bold dark:bg-white/10' : 'active:bg-black/5 dark:active:bg-white/5'}`}
                   >
@@ -77,6 +92,7 @@ export default function TrainerPlan() {
                       {chosen === i && <Check size={13} />}
                     </span>
                     <span className="min-w-0 flex-1">{pick(option)}</span>
+                    <span className="muted tabular shrink-0 text-xs">~{num(optionKcal(option))} {L('kcal', 'سعرة')}</span>
                   </button>
                 ))}
               </div>
@@ -84,6 +100,10 @@ export default function TrainerPlan() {
           </div>
         );
       })}
+
+      <p className="muted text-xs">
+        {L('Calories and macros of the plan foods are standard-table estimates, so you can track the day; edit any logged food if your portion differed.', 'سعرات أطعمة الجدول وعناصرها قيم تقديرية من جداول غذائية قياسية لكي تتابع يومك؛ عدّل أي طعام في السجل إذا اختلفت كميتك.')}
+      </p>
 
       <div className="border-t border-brand-900/10 pt-2 dark:border-white/10">
         <p className="mb-1 text-sm font-bold">💧 {L('Daily rules', 'تعليمات يومية')}</p>

@@ -7,6 +7,7 @@ import { goalById } from '../config';
 import { Bars, Meter, Page, Ring, Section, Segmented, Sheet, useConfirm, useToast } from '../components/ui';
 import { EditEntry } from '../components/FoodTools';
 import TrainerPlan from '../components/TrainerPlan';
+import AiCoach from '../components/AiCoach';
 import AddFood, { MacroLine } from '../components/AddFood';
 import { SaveMeal, formatAmount } from '../components/FoodDatabase';
 import { DAILY_VALUE, MICRO_GROUPS, NUTRIENT_NAMES, microTotals } from '../lib/foodDb';
@@ -69,6 +70,15 @@ export default function Food() {
     if (!ok) return;
     save(entries.filter((x) => x.id !== e.id));
     toast(L('Deleted', 'حُذف'));
+  };
+
+  // A trainer-plan choice lands in today's log: the meal's earlier plan
+  // foods are replaced by the newly chosen option's foods (or removed).
+  const logTrainerMeal = (mealId, items) => {
+    const rest = (log[today] || EMPTY).filter((e) => !(e.source === 'trainer' && e.meal === mealId));
+    const added = items ? items.map((item) => ({ ...item, id: uid(), meal: mealId, source: 'trainer' })) : [];
+    setLog({ ...log, [today]: [...rest, ...added] });
+    if (items) toast(L('Added to the log from the trainer plan', 'أُضيف إلى سجل اليوم من جدول المدرب'));
   };
 
   const suggestions = useMemo(
@@ -199,7 +209,9 @@ export default function Food() {
         </div>
       )}
 
-      {!planning && day === today && <TrainerPlan />}
+      {!planning && day === today && <TrainerPlan onLogMeal={logTrainerMeal} />}
+
+      {!planning && day === today && <AiCoach />}
 
       {!planning && day === today && !entries.some((e) => e.meal === mealNow()) && (() => {
         const meal = MEALS.find((m) => m.id === mealNow());
