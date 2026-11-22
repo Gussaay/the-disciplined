@@ -6,6 +6,7 @@ import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { Bars, Meter, Page, Ring, Section, Segmented, Sheet, useConfirm, useToast } from '../components/ui';
 import { EditEntry } from '../components/FoodTools';
+import TrainerPlan from '../components/TrainerPlan';
 import AddFood, { MacroLine } from '../components/AddFood';
 import { SaveMeal, formatAmount } from '../components/FoodDatabase';
 import { DAILY_VALUE, MICRO_GROUPS, NUTRIENT_NAMES, microTotals } from '../lib/foodDb';
@@ -197,6 +198,8 @@ export default function Food() {
           </button>
         </div>
       )}
+
+      {!planning && day === today && <TrainerPlan />}
 
       {!planning && day === today && !entries.some((e) => e.meal === mealNow()) && (() => {
         const meal = MEALS.find((m) => m.id === mealNow());
