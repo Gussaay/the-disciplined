@@ -5,7 +5,7 @@
 import { useMemo } from 'react';
 import { useLang } from '../i18n';
 import { goalById } from '../config';
-import { REGIONS, SETUP, targetsOf } from '../data/exerciseGuide';
+import { DESC, REGIONS, SETUP, targetsOf } from '../data/exerciseGuide';
 import { personalRecords, toolStats } from '../lib/gym';
 import { fromKey } from '../lib/dates';
 import MuscleMap from './MuscleMap';
@@ -35,6 +35,7 @@ export default function ToolDashboard({ equipment, sessions }) {
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const { primary, secondary } = useMemo(() => toolMuscles(equipment), [equipment]);
   const setup = SETUP[equipment.id] || [];
+  const desc = DESC[equipment.id];
   const used = equipment.exercises.filter((x) => stats.perExercise[x.id]);
 
   const bestLine = (x) => {
@@ -49,6 +50,12 @@ export default function ToolDashboard({ equipment, sessions }) {
 
   return (
     <div className="space-y-3">
+      {desc && (
+        <div className="card">
+          <p className="mb-1 font-bold">{L('About this machine', 'عن هذا الجهاز')}</p>
+          <p className="text-sm leading-relaxed">{L(desc[0], desc[1])}</p>
+        </div>
+      )}
       <div className="card space-y-2">
         <p className="font-bold">{L('Muscles trained', 'العضلات المُدرَّبة')}</p>
         <MuscleMap primary={primary} secondary={secondary} color={COLOR} className="mx-auto h-44" />

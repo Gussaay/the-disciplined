@@ -187,6 +187,12 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
               <span>{L('The instruction label on this machine. Tap to enlarge.', 'ملصق التعليمات على هذا الجهاز. اضغط للتكبير.')}</span>
             </button>
           )}
+          {PHOTOS[equipment.id]?.gym && PHOTOS[equipment.id].gym !== photoOf(equipment.id) && (
+            <button className="flex w-full items-center gap-3 rounded-2xl bg-brand-50/70 p-2 text-start text-sm dark:bg-white/5" onClick={() => setZoom(PHOTOS[equipment.id].gym)}>
+              <img src={PHOTOS[equipment.id].gym} alt="" className="h-14 w-20 rounded-lg object-cover" />
+              <span>{L('This machine at your gym. Tap to enlarge.', 'هذا الجهاز في ناديك. اضغط للتكبير.')}</span>
+            </button>
+          )}
           <label className="btn-ghost w-full cursor-pointer text-sm">
             <Camera size={16} />
             {own[equipment.id] ? L('Change my photo of this machine', 'غيّر صورتي لهذا الجهاز') : L('Add a photo of this machine at my gym', 'أضف صورة هذا الجهاز في ناديّ')}

@@ -183,6 +183,12 @@ export const EQUIPMENT = [
     ],
   },
   {
+    id: 'calf_raise', icon: '🦶', name: { en: 'Seated calf raise machine', ar: 'جهاز رفع السمانة جالساً' },
+    exercises: [
+      ['seated_calf_raise', 'Seated calf raise', 'رفع السمانة جالساً', 'legs', 'Balls of the feet on the platform edge, pads resting on the thighs. Lower the heels below the platform for a full stretch, then press up onto the toes as high as you can. Pause at the top.', 'ضع مقدمة القدمين على حافة المنصة والمسندين على الفخذين. أنزل الكعبين أسفل المنصة لتمدّد كامل ثم ادفع بأصابع القدمين إلى أعلى ما يمكن. توقف لحظة في الأعلى.'],
+    ],
+  },
+  {
     id: 'hip_machine', icon: '🍑', name: { en: 'Hip abductor / adductor', ar: 'جهاز فتح وضم الفخذين' },
     exercises: [
       ['hip_abduction', 'Hip abduction', 'فتح الفخذين', 'glutes', 'Push the knees out against the pads, pause, return slowly.', 'ادفع الركبتين للخارج ضد المسندين، توقف، وارجع ببطء.'],
