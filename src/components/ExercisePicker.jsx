@@ -1,12 +1,13 @@
 // Choosing what to train: by tapping a machine, by searching, or by taking a
 // photo of the machine and letting the AI recognise it.
 import { useMemo, useState } from 'react';
-import { Camera, ChevronLeft, Plus, Search, Sparkles, X } from 'lucide-react';
+import { Camera, ChevronLeft, Play, Plus, Search, Sparkles, X } from 'lucide-react';
 import { useLang } from '../i18n';
 import { EQUIPMENT, EXERCISES, MUSCLES, equipmentById } from '../data/equipment';
 import { askAI, aiAvailable } from '../lib/ai';
 import { equipmentPrompt, readEquipment } from '../lib/aiPrompts';
 import { customExercise } from '../lib/gymSession';
+import { toolStats } from '../lib/gym';
 import { AiSetupNote, PhotoButton, useAiError } from './Ai';
 import { Sheet, useToast } from './ui';
 import ExerciseGuide from './ExerciseGuide';
@@ -81,6 +82,54 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
     if (!q) return [];
     return Object.values(EXERCISES).filter((x) => `${x.name.en} ${x.name.ar} ${x.muscle}`.toLowerCase().includes(q)).slice(0, 20);
   }, [query]);
+
+  const toolResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return EQUIPMENT.filter((e) => `${e.name.en} ${e.name.ar}`.toLowerCase().includes(q)).slice(0, 5);
+  }, [query]);
+
+  // What this person actually trains on, from their saved sessions: their
+  // usual tools come first so the machine they want is one tap away, not a
+  // scroll through the whole catalogue.
+  const usage = useMemo(() => {
+    const map = {};
+    for (const e of EQUIPMENT) {
+      const stats = toolStats(sessions, e.exercises.map((x) => x.id));
+      if (stats.sessions > 0) map[e.id] = stats;
+    }
+    return map;
+  }, [sessions]);
+
+  const usual = useMemo(
+    () =>
+      EQUIPMENT.filter((e) => usage[e.id])
+        .sort((a, b) => (usage[b.id].lastDate || '').localeCompare(usage[a.id].lastDate || '') || usage[b.id].sessions - usage[a.id].sessions)
+        .slice(0, 6),
+    [usage],
+  );
+
+  const orderedTools = useMemo(() => {
+    const filtered = EQUIPMENT.filter((e) => muscleFilter === 'all' || e.exercises.some((x) => x.muscle === muscleFilter));
+    if (muscleFilter !== 'all') return filtered;
+    return [...filtered].sort((a, b) => {
+      const ua = usage[a.id];
+      const ub = usage[b.id];
+      if (ua && ub) return (ub.lastDate || '').localeCompare(ua.lastDate || '') || ub.sessions - ua.sessions;
+      if (ua) return -1;
+      if (ub) return 1;
+      return 0;
+    });
+  }, [muscleFilter, usage]);
+
+  // The exercise a one-tap start begins with: the one most trained on this
+  // tool, or its first exercise when it has never been used.
+  const quickExercise = (e) => {
+    const per = usage[e.id]?.perExercise || {};
+    const trained = e.exercises.filter((x) => per[x.id]);
+    const best = trained.sort((a, b) => (per[b.id].sets || 0) - (per[a.id].sets || 0) || (per[b.id].lastDate || '').localeCompare(per[a.id].lastDate || ''))[0];
+    return EXERCISES[(best || e.exercises[0]).id];
+  };
 
   const recognise = async (photo) => {
     if (!aiAvailable()) {
@@ -158,8 +207,26 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
       ))}
 
       {query.trim() ? (
-        results.length ? (
-          results.map((x) => <ExerciseRow key={x.id} exercise={x} onAdd={onAdd} addLabel={addLabel} />)
+        toolResults.length || results.length ? (
+          <>
+            {toolResults.map((e) => (
+              <button
+                key={e.id}
+                className="card flex w-full items-center gap-3 !p-2 text-start"
+                onClick={() => { setEquipmentId(e.id); setQuery(''); }}
+              >
+                {photoOf(e.id)
+                  ? <img src={photoOf(e.id)} alt="" className="h-12 w-16 shrink-0 rounded-lg object-cover" />
+                  : <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-brand-50/70 text-2xl dark:bg-white/5" aria-hidden>{e.icon}</span>}
+                <span className="min-w-0 flex-1">
+                  <span className="block font-bold leading-tight">{pick(e.name)}</span>
+                  <span className="muted block text-xs">{L(`${e.exercises.length} exercises`, `${e.exercises.length} تمارين`)}</span>
+                </span>
+                <ChevronLeft size={18} className="muted flip-rtl shrink-0" />
+              </button>
+            ))}
+            {results.map((x) => <ExerciseRow key={x.id} exercise={x} onAdd={onAdd} addLabel={addLabel} />)}
+          </>
         ) : (
           <div className="card text-center text-sm">
             <p className="muted">{L('No exercise matches. Add it as your own:', 'لا يوجد تمرين مطابق. أضفه كتمرين خاص:')}</p>
@@ -215,6 +282,22 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
       ) : (
         !found?.exercises?.length && (
           <>
+            {muscleFilter === 'all' && usual.length > 0 && (
+              <div>
+                <p className="eyebrow px-1 pb-1.5">{L('Your usual tools', 'أجهزتك المعتادة')}</p>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {usual.map((e) => (
+                    <button key={e.id} className="w-28 shrink-0 overflow-hidden rounded-2xl bg-brand-50/70 text-start active:scale-[0.98] dark:bg-white/5" onClick={() => setEquipmentId(e.id)}>
+                      {photoOf(e.id)
+                        ? <img src={photoOf(e.id)} alt="" loading="lazy" className="h-16 w-full object-cover" />
+                        : <span className="flex h-16 w-full items-center justify-center text-3xl" aria-hidden>{e.icon}</span>}
+                      <span className="block truncate px-2 pt-1 text-xs font-bold leading-tight">{pick(e.name)}</span>
+                      <span className="muted block px-2 pb-2 text-[11px]">{L(`${usage[e.id].sessions} sessions`, `${usage[e.id].sessions} حصص`)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {['all', ...Object.keys(MUSCLES)].map((m) => (
                 <button
@@ -227,19 +310,33 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
               ))}
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {EQUIPMENT.filter((e) => muscleFilter === 'all' || e.exercises.some((x) => x.muscle === muscleFilter)).map((e) => (
-                <button key={e.id} className="card flex flex-col items-start gap-1 overflow-hidden !p-0 text-start active:scale-[0.98]" onClick={() => setEquipmentId(e.id)}>
-                  {photoOf(e.id) ? (
-                    <img src={photoOf(e.id)} alt="" loading="lazy" className="h-28 w-full object-cover" />
-                  ) : (
-                    <span className="flex h-28 w-full items-center justify-center bg-brand-50/70 text-5xl dark:bg-white/5" aria-hidden>{e.icon}</span>
+              {orderedTools.map((e) => (
+                <div key={e.id} className="card flex flex-col overflow-hidden !p-0">
+                  <button className="flex flex-1 flex-col items-start gap-1 text-start active:scale-[0.98]" onClick={() => setEquipmentId(e.id)}>
+                    {photoOf(e.id) ? (
+                      <img src={photoOf(e.id)} alt="" loading="lazy" className="h-28 w-full object-cover" />
+                    ) : (
+                      <span className="flex h-28 w-full items-center justify-center bg-brand-50/70 text-5xl dark:bg-white/5" aria-hidden>{e.icon}</span>
+                    )}
+                    <span className="px-3 pt-1 font-bold leading-tight">{pick(e.name)}</span>
+                    <span className="muted px-3 text-xs">
+                      {[...new Set(e.exercises.map((x) => x.muscle))].slice(0, 3).map((m) => (MUSCLES[m] ? pick(MUSCLES[m]) : m)).join(L(' · ', ' · '))}
+                    </span>
+                    <span className="muted px-3 pb-2 text-xs">
+                      {L(`${e.exercises.length} exercises`, `${e.exercises.length} تمارين`)}
+                      {usage[e.id] ? L(` · ${usage[e.id].sessions} sessions`, ` · ${usage[e.id].sessions} حصص`) : ''}
+                    </span>
+                  </button>
+                  {onAdd && (
+                    <button
+                      className="flex items-center justify-center gap-1.5 border-t border-brand-900/10 py-2 text-xs font-bold text-brand-700 dark:border-white/10 dark:text-brand-200"
+                      onClick={() => onAdd(quickExercise(e))}
+                    >
+                      <Play size={13} />
+                      {addLabel || L('Start', 'ابدأ')}: {pick(quickExercise(e).name)}
+                    </button>
                   )}
-                  <span className="px-3 pt-1 font-bold leading-tight">{pick(e.name)}</span>
-                  <span className="muted px-3 text-xs">
-                    {[...new Set(e.exercises.map((x) => x.muscle))].slice(0, 3).map((m) => (MUSCLES[m] ? pick(MUSCLES[m]) : m)).join(L(' · ', ' · '))}
-                  </span>
-                  <span className="muted px-3 pb-3 text-xs">{L(`${e.exercises.length} exercises`, `${e.exercises.length} تمارين`)}</span>
-                </button>
+                </div>
               ))}
             </div>
           </>

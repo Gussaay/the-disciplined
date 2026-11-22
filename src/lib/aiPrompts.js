@@ -4,6 +4,35 @@
 const langName = (lang) => (lang === 'ar' ? 'Arabic' : 'English');
 
 /** Pulls the first JSON object or array out of a model reply (it may be fenced). */
+/**
+ * Repairs the slips models make inside JSON: a backslash before a letter
+ * that is not a JSON escape ("\\wide grip", "don\\'t") — the cause of the
+ * "Bad escaped character in JSON" error the person saw — a broken \\u
+ * escape, a literal newline typed inside a string, and trailing commas.
+ */
+function repairJson(text) {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (!inString) {
+      if (ch === '"') inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === '"') { inString = false; out += ch; continue; }
+    if (ch === '\\') {
+      const next = text[i + 1] || '';
+      if ('"\\/bfnrt'.includes(next)) { out += ch + next; i += 1; continue; }
+      if (next === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(i + 2, i + 6))) { out += text.slice(i, i + 6); i += 5; continue; }
+      continue; // a stray backslash: drop it, keep the letter after it
+    }
+    if (ch < ' ') { out += ch === '\n' ? '\\n' : ch === '\r' ? '\\r' : ch === '\t' ? '\\t' : ' '; continue; }
+    out += ch;
+  }
+  return out.replace(/,\s*([}\]])/g, '$1');
+}
+
 export function parseJson(text) {
   const raw = String(text || '').replace(/```(?:json)?/gi, '').trim();
   try {
@@ -15,7 +44,14 @@ export function parseJson(text) {
   const close = open === '{' ? '}' : ']';
   const end = raw.lastIndexOf(close);
   if (end <= start) throw new Error('The AI reply was not understood');
-  return JSON.parse(raw.slice(start, end + 1));
+  const slice = raw.slice(start, end + 1);
+  try {
+    return JSON.parse(slice);
+  } catch { /* repair the model's slips and try once more */ }
+  try {
+    return JSON.parse(repairJson(slice));
+  } catch { /* fall through to the friendly error */ }
+  throw new Error('The AI reply was not understood');
 }
 
 const num = (v) => {

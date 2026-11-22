@@ -9,6 +9,15 @@ test('JSON is found bare, fenced, or inside prose', () => {
   assert.throws(() => parseJson('sorry, no idea'));
 });
 
+test('JSON with the slips models make is repaired, and junk fails kindly', () => {
+  assert.deepEqual(parseJson('{"tip":"use a \\wide grip"}'), { tip: 'use a wide grip' });
+  assert.deepEqual(parseJson("{\"tip\":\"don\\'t stop\"}"), { tip: "don't stop" });
+  assert.deepEqual(parseJson('{"a":1,}'), { a: 1 });
+  assert.deepEqual(parseJson('{"a":"one\ntwo"}'), { a: 'one\ntwo' });
+  assert.throws(() => parseJson('{"a": }'), /not understood/);
+  assert.throws(() => parseJson('{broken'), /not understood/);
+});
+
 test('food answers are cleaned: numbers from text, alternate field names, junk rows dropped', () => {
   const { items, note } = readFoods({
     items: [
