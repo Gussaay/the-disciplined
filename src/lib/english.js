@@ -19,6 +19,8 @@ export const SKILLS = {
   speaking: { name: { en: 'Speaking', ar: 'المحادثة' }, icon: '🗣️' },
   writing: { name: { en: 'Writing', ar: 'الكتابة' }, icon: '✍️' },
   grammar: { name: { en: 'Grammar', ar: 'القواعد' }, icon: '🧩' },
+  shadowing: { name: { en: 'Shadowing', ar: 'المحاكاة الصوتية' }, icon: '🎙️' },
+  communication: { name: { en: 'Communication', ar: 'التواصل' }, icon: '💬' },
 };
 
 const TASKS = {
@@ -56,17 +58,31 @@ const TASKS = {
     B1: { en: 'Present perfect against past simple. Write 6 examples', ar: 'المضارع التام مقابل الماضي البسيط. اكتب 6 أمثلة' },
     B2: { en: 'Conditionals and the passive. Rewrite 6 sentences', ar: 'الجمل الشرطية والمبني للمجهول. أعد كتابة 6 جمل' },
   },
+  shadowing: {
+    A1: { en: 'Shadow a slow dialogue line by line: listen, pause, copy the sounds', ar: 'حاكِ حواراً بطيئاً سطراً بسطر: استمع وتوقّف وقلّد الأصوات' },
+    A2: { en: 'Shadow a short story recording for 5 minutes, whispering along with the speaker', ar: 'حاكِ تسجيل قصة قصيرة لمدة 5 دقائق وأنت تهمس مع المتحدث' },
+    B1: { en: 'Shadow a podcast segment for 8 minutes; keep the rhythm, not just the words', ar: 'حاكِ مقطعاً من بودكاست لمدة 8 دقائق وحافظ على الإيقاع لا الكلمات فقط' },
+    B2: { en: 'Shadow a talk or news clip at full speed; record yourself and compare the melody', ar: 'حاكِ مقطعاً من محاضرة أو نشرة أخبار بالسرعة الكاملة وسجّل نفسك وقارن النغمة' },
+  },
+  communication: {
+    A1: { en: 'Practise greetings and small talk aloud: hello, how are you, where are you from', ar: 'تدرّب على التحية والحديث القصير بصوت عالٍ: مرحباً، كيف حالك، من أين أنت' },
+    A2: { en: 'Role-play ordering food and asking for the bill, aloud, twice', ar: 'مثّل طلب الطعام وطلب الفاتورة بصوت عالٍ مرتين' },
+    B1: { en: 'Give your opinion on a simple topic, then ask one follow-up question', ar: 'أعطِ رأيك في موضوع بسيط ثم اسأل سؤال متابعة واحداً' },
+    B2: { en: 'Discuss a question for 5 minutes: an opinion, a reason, an example, and an invitation to reply', ar: 'ناقش سؤالاً لمدة 5 دقائق: رأي وسبب ومثال ودعوة للرد' },
+  },
 };
 
-// Which two skills join vocabulary on each weekday (0 = Sunday).
+// Which two skills join vocabulary on each weekday (0 = Sunday). Every
+// skill comes up twice a week; shadowing rides with listening and
+// speaking, communication with the writing days.
 const ROTATION = [
-  ['listening', 'speaking'],
+  ['listening', 'shadowing'],
   ['reading', 'grammar'],
-  ['listening', 'writing'],
+  ['writing', 'communication'],
   ['reading', 'speaking'],
   ['listening', 'grammar'],
-  ['speaking', 'writing'],
-  ['reading', 'listening'],
+  ['speaking', 'shadowing'],
+  ['writing', 'communication'],
 ];
 
 /**

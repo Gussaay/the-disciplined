@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
-import { Check, ExternalLink, Flame, Plus, Send, Sparkles, Volume2 } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, Flame, Plus, Send, Sparkles, Volume2 } from 'lucide-react';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { Bars, Field, Page, Section, Segmented, useToast } from '../components/ui';
 import { AiSetupNote, useAiError } from '../components/Ai';
 import { RESOURCES, WORDS } from '../data/words';
+import { LESSONS } from '../data/lessons';
 import { LEVELS, SKILLS, dayProgress, dueWords, newWords, reviewWord, studyStreak, weekMinutes, wordStats } from '../lib/english';
 import { dayKey, fromKey } from '../lib/dates';
 import { openUrl } from '../lib/native';
@@ -103,6 +104,107 @@ function Today({ english, setEnglish }) {
         );
       })}
     </>
+  );
+}
+
+function Lessons({ english, setEnglish }) {
+  const { L, pick } = useLang();
+  const [open, setOpen] = useState(null);
+  const today = dayKey();
+  const done = english.log?.[today]?.done || NONE;
+
+  // A finished exercise goes into the day's log like any other task, so
+  // the streak, the dashboard and the progress bars all see it. The day's
+  // minutes are the plan minutes plus the minutes of finished exercises.
+  const toggleExercise = (exercise) => {
+    const nextDone = { ...done, [exercise.id]: !done[exercise.id] };
+    const planMinutes = dayProgress(english, { [today]: { done: nextDone } }, new Date()).minutes;
+    const lessonMinutes = LESSONS.flatMap((l) => l.exercises).filter((e) => nextDone[e.id]).reduce((s, e) => s + e.minutes, 0);
+    setEnglish({ ...english, log: { ...(english.log || {}), [today]: { done: nextDone, minutes: planMinutes + lessonMinutes } } });
+  };
+
+  return (
+    <Section title={L('Lessons · B2', 'الدروس · B2')}>
+      {english.level !== 'B2' && (
+        <p className="muted text-sm">{L('These lessons are written for level B2. Work through them when you feel ready — they are the fastest way to sound natural.', 'هذه الدروس مكتوبة للمستوى B2. اعمل عليها عندما تشعر أنك مستعد — فهي أسرع طريق لتبدو طبيعياً.')}</p>
+      )}
+      {LESSONS.map((lesson) => {
+        const skill = SKILLS[lesson.skill];
+        const isOpen = open === lesson.id;
+        return (
+          <div key={lesson.id} className="card space-y-3">
+            <button className="flex w-full items-center gap-3 text-start" onClick={() => setOpen(isOpen ? null : lesson.id)} aria-expanded={isOpen}>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl text-white" style={{ background: COLOR }} aria-hidden>{skill.icon}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-extrabold">{pick(lesson.title)}</span>
+                <span className="muted block text-sm">{pick(skill.name)} · {L(`${lesson.minutes} min`, `${lesson.minutes} دقيقة`)} · B2</span>
+              </span>
+              <ChevronDown size={20} className={`shrink-0 transition ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && (
+              <>
+                <p className="text-sm leading-relaxed">{pick(lesson.intro)}</p>
+                <div>
+                  <p className="eyebrow mb-1">{L('How it works', 'كيف تعمل')}</p>
+                  <ol className="list-decimal space-y-1 ps-5 text-sm leading-relaxed">
+                    {lesson.steps.map((s, i) => <li key={i}>{pick(s)}</li>)}
+                  </ol>
+                </div>
+                <div>
+                  <p className="eyebrow mb-1">{L('Useful phrases', 'عبارات مفيدة')}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {lesson.phrases.map((p, i) => (
+                      <span key={i} className="chip text-xs"><b dir="ltr" lang="en">{p.en}</b> · {p.ar}</span>
+                    ))}
+                  </div>
+                </div>
+                {lesson.exercises.map((exercise) => (
+                  <div key={exercise.id} className="rounded-xl bg-brand-900/5 p-3 dark:bg-white/5">
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => toggleExercise(exercise)}
+                        aria-pressed={Boolean(done[exercise.id])}
+                        aria-label={L('Mark done', 'وضع علامة منجز')}
+                        className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${done[exercise.id] ? 'text-white' : 'bg-white text-slate-400 dark:bg-white/10'}`}
+                        style={done[exercise.id] ? { background: COLOR } : undefined}
+                      >
+                        <Check size={20} />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-extrabold">{pick(exercise.title)} <span className="muted tabular text-sm font-normal">· {L(`${exercise.minutes} min`, `${exercise.minutes} دقيقة`)}</span></p>
+                        <p className="text-sm leading-relaxed">{pick(exercise.instructions)}</p>
+                      </div>
+                    </div>
+                    {exercise.lines && (
+                      <div className="mt-2 space-y-2">
+                        {exercise.lines.map((line, i) => (
+                          <div key={i} className="rounded-lg bg-white p-2.5 dark:bg-[#12201F]">
+                            <div className="flex items-start gap-2">
+                              <p className="min-w-0 flex-1 leading-relaxed" dir="ltr" lang="en">{line.en}</p>
+                              <button className="muted flex h-9 w-9 shrink-0 items-center justify-center" aria-label={L('Listen', 'استمع')} onClick={() => speak(line.en)}>
+                                <Volume2 size={16} />
+                              </button>
+                            </div>
+                            <p className="muted text-sm" dir="rtl" lang="ar">{line.ar}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {exercise.prompts && (
+                      <ul className="mt-2 list-disc space-y-1.5 ps-5 text-sm leading-relaxed">
+                        {exercise.prompts.map((prompt, i) => (
+                          <li key={i}><span dir="ltr" lang="en">{prompt.en}</span><br /><span className="muted" dir="rtl" lang="ar">{prompt.ar}</span></li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        );
+      })}
+    </Section>
   );
 }
 
@@ -415,7 +517,12 @@ export default function English() {
               { value: 'progress', label: L('Progress', 'التقدم'), icon: '📈' },
             ]}
           />
-          {tab === 'today' && <Today english={english} setEnglish={setEnglish} />}
+          {tab === 'today' && (
+            <>
+              <Today english={english} setEnglish={setEnglish} />
+              <Lessons english={english} setEnglish={setEnglish} />
+            </>
+          )}
           {tab === 'words' && <Words english={english} setEnglish={setEnglish} />}
           {tab === 'tutor' && <Tutor english={english} />}
           {tab === 'progress' && <Progress english={english} setEnglish={setEnglish} />}
