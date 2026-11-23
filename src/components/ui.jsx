@@ -16,7 +16,7 @@ export function Page({ title, subtitle, back, action, children, tone = 'plain', 
   return (
     <div className={`mx-auto min-h-screen max-w-2xl pb-28 ${g ? 'themed' : ''}`} style={vars}>
       <header
-        className={`pt-safe sticky top-0 z-20 ${dark ? 'bg-brand-800 text-white' : 'bg-paper/95 backdrop-blur dark:bg-[#0B1413]/95'}`}
+        className={`pt-safe sticky top-0 z-20 ${dark ? 'hero text-white' : 'bg-paper/95 backdrop-blur dark:bg-[#0B1413]/95'}`}
       >
         <div className="flex min-h-[56px] items-center gap-2 px-4">
           {back && (
@@ -207,6 +207,23 @@ export function Spinner({ label }) {
     <div className="flex items-center justify-center gap-3 py-8" role="status">
       <span className="h-6 w-6 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-700" />
       {label && <span className="muted text-sm">{label}</span>}
+    </div>
+  );
+}
+
+/** Shimmer placeholder shown while a screen's data loads — the loading half
+ *  of the one feedback language (Spinner for waits, Skeleton for content). */
+export function Skeleton({ className = 'h-24' }) {
+  return <div className={`skeleton ${className}`} role="status" aria-label="Loading" />;
+}
+
+export function SkeletonCard({ lines = 2 }) {
+  return (
+    <div className="card space-y-2" role="status" aria-label="Loading">
+      <div className="skeleton h-5 w-2/5" />
+      {Array.from({ length: lines }, (_, i) => (
+        <div key={i} className="skeleton h-4" style={{ width: `${85 - i * 15}%` }} />
+      ))}
     </div>
   );
 }

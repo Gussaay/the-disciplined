@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, ChevronRight, Flame, Settings as SettingsIcon } from 'lucide-react';
+import {
+  BarChart3, BookOpen, ChevronRight, Droplets, Dumbbell, Flame, Footprints, Languages, ListChecks,
+  MoonStar, Scale, Settings as SettingsIcon, Sparkles, Users, UtensilsCrossed, Watch as WatchIcon,
+} from 'lucide-react';
 import UpdateBanner from '../components/UpdateBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useLang } from '../i18n';
@@ -59,6 +62,7 @@ export default function Home() {
   const [settings] = useStore('settings', NONE);
   const [gymSessions] = useStore('gymSessions', EMPTY);
   const [foodLog] = useStore('foodLog', NONE);
+  const [water] = useStore('water', NONE);
   const [prayerLog] = useStore('prayerLog', NONE);
   const [weightLog] = useStore('weightLog', EMPTY);
   const [tasks] = useStore('tasks', EMPTY);
@@ -121,9 +125,26 @@ export default function Home() {
   const week = lastDays(7, today).map((key) => ({ key, value: commitment(data, key).overall }));
   const firstRun = !profile.setup;
 
+  // The services grid: every section one tap from Home, one icon language
+  // (Lucide line icons at a fixed stroke, each in its goal's colour).
+  const services = [
+    { to: '/gym', g: 'gym', Icon: Dumbbell },
+    { to: '/food', g: 'food', Icon: UtensilsCrossed },
+    { to: '/prayer', g: 'prayer', Icon: MoonStar },
+    { to: '/prayer/quran', label: L('Quran', 'القرآن'), color: goalById('prayer').color, Icon: BookOpen },
+    { to: '/prayer/azkar', label: L('Azkar', 'الأذكار'), color: goalById('prayer').color, Icon: Sparkles },
+    { to: '/social', g: 'social', Icon: Users },
+    { to: '/english', g: 'english', Icon: Languages },
+    { to: '/tasks', g: 'tasks', Icon: ListChecks },
+    { to: '/weight', g: 'weight', Icon: Scale },
+    { to: '/watch', g: 'watch', Icon: WatchIcon },
+    { to: '/dashboard', label: L('Dashboard', 'لوحة المتابعة'), color: '#0F3D3E', Icon: BarChart3 },
+    { to: '/settings', label: L('Settings', 'الإعدادات'), color: '#0F3D3E', Icon: SettingsIcon },
+  ].map((s) => (s.g ? { ...s, label: pick(goalById(s.g).short || goalById(s.g).name), color: goalById(s.g).color } : s));
+
   return (
     <div className="mx-auto min-h-screen max-w-2xl pb-28">
-      <div className="pt-safe rounded-b-[2rem] bg-brand-800 text-white">
+      <div className="pt-safe hero rounded-b-[2rem] text-white">
         <div className="px-5 pb-6 pt-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -183,6 +204,29 @@ export default function Home() {
               </div>
             ))}
           </div>
+
+          <div className="mt-5 grid grid-cols-4 gap-2">
+            <Link to="/watch" className="glass flex flex-col items-center gap-0.5 px-1 py-2.5 text-center">
+              <Footprints size={17} className="text-gold-300" />
+              <span className="tabular max-w-full truncate text-sm font-extrabold">{watchLog[today]?.steps != null ? num(watchLog[today].steps) : '—'}</span>
+              <span className="text-[11px] text-white/70">{L('Steps', 'خطوات')}</span>
+            </Link>
+            <Link to="/food" className="glass flex flex-col items-center gap-0.5 px-1 py-2.5 text-center">
+              <Flame size={17} className="text-gold-300" />
+              <span className="tabular max-w-full truncate text-sm font-extrabold">{num(Math.round(eaten.kcal))}</span>
+              <span className="text-[11px] text-white/70">{L(`of ${num(targets.kcal)} kcal`, `من ${num(targets.kcal)} سعرة`)}</span>
+            </Link>
+            <Link to="/food" className="glass flex flex-col items-center gap-0.5 px-1 py-2.5 text-center">
+              <Droplets size={17} className="text-gold-300" />
+              <span className="tabular max-w-full truncate text-sm font-extrabold">{(water[today] || 0) >= 1000 ? `${num((water[today] || 0) / 1000, 1)} ${L('L', 'لتر')}` : `${num(water[today] || 0)} ${L('ml', 'مل')}`}</span>
+              <span className="text-[11px] text-white/70">{L('Water', 'الماء')}</span>
+            </Link>
+            <Link to="/weight" className="glass flex flex-col items-center gap-0.5 px-1 py-2.5 text-center">
+              <Scale size={17} className="text-gold-300" />
+              <span className="tabular max-w-full truncate text-sm font-extrabold">{lastWeight ? num(lastWeight.weight, 1) : '—'}</span>
+              <span className="text-[11px] text-white/70">{L('kg · weight', 'كجم · الوزن')}</span>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -228,6 +272,20 @@ export default function Home() {
           </div>
           <ChevronRight size={18} className="muted flip-rtl shrink-0" />
         </Link>
+
+        <div className="pt-2">
+          <p className="eyebrow px-1 pb-2">{L('All sections', 'كل الأقسام')}</p>
+          <div className="grid grid-cols-4 gap-2">
+            {services.map((s) => (
+              <Link key={s.to} to={s.to} className="card flex flex-col items-center gap-1.5 px-1 py-3 text-center active:scale-[0.97]">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: `${s.color}1F`, color: s.color }} aria-hidden>
+                  <s.Icon size={20} strokeWidth={1.8} />
+                </span>
+                <span className="w-full truncate text-xs font-bold">{s.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
 
       <Sheet

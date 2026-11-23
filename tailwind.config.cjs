@@ -19,6 +19,11 @@ module.exports = {
           900: '#0A2B2C',
         },
         gold: { 100: '#FBF0D0', 300: '#EBCB73', 400: '#E0B84A', 500: '#C99A22', 600: '#A67C12' },
+        // Semantic tokens (design-refresh phase 1): one meaning, one colour,
+        // everywhere — success, warning, danger.
+        success: '#2F7D4F',
+        warning: '#B97F10',
+        danger: '#BC3B30',
         paper: '#F6F3EC',
         ink: '#0C1716',
       },
@@ -29,10 +34,12 @@ module.exports = {
       keyframes: {
         rise: { '0%': { opacity: 0, transform: 'translateY(8px)' }, '100%': { opacity: 1, transform: 'none' } },
         sheet: { '0%': { transform: 'translateY(100%)' }, '100%': { transform: 'none' } },
+        shimmer: { '0%': { backgroundPosition: '200% 0' }, '100%': { backgroundPosition: '-200% 0' } },
       },
       animation: {
         rise: 'rise 0.25s ease-out both',
         sheet: 'sheet 0.22s ease-out both',
+        shimmer: 'shimmer 1.4s linear infinite',
       },
     },
   },
