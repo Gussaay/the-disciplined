@@ -1,17 +1,22 @@
-// The workout in progress: sets to tick off, a rest timer, what was done last
-// time, and the live heart rate from a watch.
+// The workout in progress: every machine in the gym, grouped under
+// collapsible muscle headers, each with its state (not started, ongoing,
+// finished). Tapping a machine opens its pop-up to add the numbers; every
+// keystroke is saved on the device at once, so closing the app — or the app
+// dying — loses nothing, and every pop-up reopens exactly as it was left.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Check, HeartPulse, Info, Plus, Timer, Trash2, Trophy, X } from 'lucide-react';
+import { Check, ChevronDown, HeartPulse, Info, Plus, Search, Timer, Trash2, Trophy, X } from 'lucide-react';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
-import { NumberInput, useToast } from '../components/ui';
-import ExercisePicker from '../components/ExercisePicker';
+import { NumberInput, Sheet, useToast } from '../components/ui';
+import ExercisePicker, { useMachinePhotos } from '../components/ExercisePicker';
 import ExerciseGuide from '../components/ExerciseGuide';
-import { EXERCISES, MUSCLES } from '../data/equipment';
+import KeywordsEditor from '../components/KeywordsEditor';
+import { EQUIPMENT, EXERCISES, MUSCLES, equipmentById } from '../data/equipment';
 import { estimateBurn, isRecord, lastPerformance, nextTarget, personalRecords, sessionMinutes, sessionSets, sessionVolume } from '../lib/gym';
 import { addSet, finishSession, makeExercise, setComplete } from '../lib/gymSession';
+import { groupTools, looseEntries, toolDoneSets, toolEntries, toolMatches, toolStatus } from '../lib/gymTools';
 import { hrStats } from '../lib/hrParse';
 import { connectHeartRate, heartRateSupported } from '../lib/heartRate';
 import { watchSupported } from '../lib/watch';
@@ -69,6 +74,12 @@ function SetRow({ index, set, unit, onChange, onToggle, onRemove, record }) {
   );
 }
 
+const STATUS_STYLE = {
+  todo: 'bg-brand-900/10 text-slate-500 dark:bg-white/10 dark:text-slate-300',
+  doing: 'text-white',
+  done: 'text-white',
+};
+
 export default function GymSession() {
   const { L, pick, num } = useLang();
   const navigate = useNavigate();
@@ -78,16 +89,23 @@ export default function GymSession() {
   const [profile] = useStore('profile', NONE);
   const [settings, setSettings] = useStore('settings', NONE);
   const [plan, setPlan] = useStore('gymPlan', null);
+  const [keywords, setKeywords] = useStore('gymKeywords', NONE);
   const [adding, setAdding] = useState(false);
   const [howFor, setHowFor] = useState(null);
   const [summary, setSummary] = useState(null);
   const [restUntil, setRestUntil] = useState(0);
   const [bpm, setBpm] = useState(0);
   const [watch, setWatch] = useState(null);
+  const [query, setQuery] = useState('');
+  const [collapsed, setCollapsed] = useState(NONE);
+  const [openTool, setOpenTool] = useState(null);
+  const [popEx, setPopEx] = useState(null);
+  const [openLoose, setOpenLoose] = useState(null);
   const hr = useRef(null);
   const link = useRef(null);
   const now = useNow();
   const rest = Number(settings.rest) || 90;
+  const { photoOf } = useMachinePhotos();
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
 
@@ -179,6 +197,7 @@ export default function GymSession() {
 
   if (!active) return <Navigate to="/gym" replace />;
 
+  const doneTools = active.doneTools || EMPTY;
   const patchExercise = (i, fn) =>
     setActive({ ...active, exercises: active.exercises.map((e, j) => (j === i ? fn(e) : e)) });
   const patchSet = (i, k, patch) =>
@@ -241,6 +260,129 @@ export default function GymSession() {
   const nameOf = (e) => (e.name ? (typeof e.name === 'string' ? e.name : pick(e.name)) : pick(EXERCISES[e.exerciseId]?.name) || e.exerciseId);
   const howOf = (e) => (e.how ? (typeof e.how === 'string' ? e.how : pick(e.how)) : pick(EXERCISES[e.exerciseId]?.how));
 
+  // --- The device list: every tool, grouped, searchable, with its state ---
+  const searching = query.trim().length > 0;
+  const groups = groupTools(EQUIPMENT, Object.keys(MUSCLES))
+    .map((g) => ({
+      ...g,
+      tools: g.tools
+        .filter((t) => toolMatches(t, EXERCISES, keywords, query, MUSCLES))
+        .sort((a, b) => {
+          const rank = { doing: 0, todo: 1, done: 2 };
+          return rank[toolStatus(active, a, doneTools)] - rank[toolStatus(active, b, doneTools)];
+        }),
+    }))
+    .filter((g) => g.tools.length);
+  const loose = looseEntries(active, EQUIPMENT);
+  const counts = EQUIPMENT.reduce(
+    (acc, t) => {
+      acc[toolStatus(active, t, doneTools)] += 1;
+      return acc;
+    },
+    { todo: 0, doing: 0, done: 0 },
+  );
+
+  const statusChip = (tool) => {
+    const st = toolStatus(active, tool, doneTools);
+    const label =
+      st === 'done'
+        ? L('Finished', 'انتهى')
+        : st === 'doing'
+          ? L(`Ongoing · ${toolDoneSets(active, tool)} ✓`, `جارٍ · ${toolDoneSets(active, tool)} ✓`)
+          : L('Not started', 'لم يبدأ');
+    return (
+      <span
+        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${STATUS_STYLE[st]}`}
+        style={st === 'doing' ? { background: '#B97F10' } : st === 'done' ? { background: '#2F7D4F' } : undefined}
+      >
+        {label}
+      </span>
+    );
+  };
+
+  // Opening a machine starts its main exercise (the one most trained on it,
+  // else its first) when the workout has none of its exercises yet.
+  const openToolPop = (tool) => {
+    const mine = toolEntries(active, tool);
+    if (mine.length) {
+      setPopEx(mine[0].exerciseId);
+    } else {
+      const per = {};
+      for (const s of sessions) for (const e of s.exercises || []) if (tool.exercises.some((x) => x.id === e.exerciseId)) per[e.exerciseId] = (per[e.exerciseId] || 0) + 1;
+      const first = [...tool.exercises].sort((a, b) => (per[b.id] || 0) - (per[a.id] || 0))[0];
+      const entry = makeExercise(EXERCISES[first.id], sessions);
+      setActive({ ...active, exercises: [...active.exercises, entry] });
+      setPopEx(first.id);
+    }
+    setHowFor(null);
+    setOpenTool(tool.id);
+  };
+
+  const toggleDoneTool = (tool) => {
+    const has = doneTools.includes(tool.id);
+    setActive({ ...active, doneTools: has ? doneTools.filter((id) => id !== tool.id) : [...doneTools, tool.id] });
+  };
+
+  const setEditor = (i, e) => {
+    const last = lastPerformance(sessions, e.exerciseId, active.id);
+    const target = e.unit === 'kg' ? nextTarget(last) : null;
+    return (
+      <div>
+        {howOf(e) && (
+          <button className="btn-ghost !min-h-[36px] !px-2 text-sm" onClick={() => setHowFor(howFor === i ? null : i)}>
+            <Info size={16} /> {L('How to do it', 'طريقة الأداء')}
+          </button>
+        )}
+        {howFor === i && (
+          <div className="mt-1 rounded-xl bg-brand-50/50 p-3 dark:bg-white/5">
+            <ExerciseGuide exercise={{ ...e, how: howOf(e) }} />
+          </div>
+        )}
+        {last && (
+          <p className="muted mt-1 text-sm">
+            {L('Last time: ', 'المرة السابقة: ')}
+            <span className="tabular">
+              {last.sets
+                .map((s) => (e.unit === 'cardio' ? L(`${s.minutes} min`, `${s.minutes} د`) : e.unit === 'time' ? L(`${s.seconds} s`, `${s.seconds} ث`) : `${s.weight || 0}×${s.reps}`))
+                .join(L(', ', '، '))}
+            </span>
+          </p>
+        )}
+        {target && (
+          <p className="text-sm font-bold" style={{ color: COLOR }}>
+            {target.raise
+              ? L(`Today: go up to ${target.weight} kg × ${target.reps}`, `اليوم: ارفع إلى ${target.weight} كجم × ${target.reps}`)
+              : L(`Today: aim for ${target.weight} kg × ${target.reps}`, `اليوم: استهدف ${target.weight} كجم × ${target.reps}`)}
+          </p>
+        )}
+        <div className="mt-2 space-y-1">
+          {e.sets.map((s, k) => (
+            <SetRow
+              key={k}
+              index={k}
+              set={s}
+              unit={e.unit}
+              record={s.done && isRecord(records, e.exerciseId, s)}
+              onChange={(patch) => patchSet(i, k, patch)}
+              onToggle={() => toggle(i, k)}
+              onRemove={() => patchExercise(i, (x) => ({ ...x, sets: x.sets.filter((_, j) => j !== k) }))}
+            />
+          ))}
+        </div>
+        <button className="btn-ghost mt-1 w-full !min-h-[40px]" onClick={() => patchExercise(i, addSet)}>
+          <Plus size={16} /> {L('Add set', 'إضافة مجموعة')}
+        </button>
+      </div>
+    );
+  };
+
+  const tool = openTool ? equipmentById(openTool) : null;
+  const toolMine = tool ? toolEntries(active, tool) : EMPTY;
+  const selId = toolMine.some((e) => e.exerciseId === popEx) ? popEx : toolMine[0]?.exerciseId;
+  const selIdx = selId ? active.exercises.findIndex((e) => e.exerciseId === selId) : -1;
+  const looseEntry = openLoose != null ? active.exercises[openLoose] : null;
+  const looseValid = looseEntry && !EQUIPMENT.some((t) => t.exercises.some((x) => x.id === looseEntry.exerciseId));
+
   return (
     <div className="mx-auto min-h-screen max-w-2xl pb-40">
       <header className="pt-safe sticky top-0 z-20 text-white" style={{ background: COLOR }}>
@@ -280,75 +422,92 @@ export default function GymSession() {
       </header>
 
       <main className="space-y-3 px-4 pt-3">
-        {active.exercises.map((e, i) => {
-          const last = lastPerformance(sessions, e.exerciseId, active.id);
-          const target = e.unit === 'kg' ? nextTarget(last) : null;
-          const muscle = MUSCLES[e.muscle] ? pick(MUSCLES[e.muscle]) : e.muscle;
+        <label className="relative block">
+          <Search size={18} className="muted pointer-events-none absolute start-3 top-1/2 -translate-y-1/2" />
+          <input
+            className="input !ps-10"
+            placeholder={L('Search a device — Arabic, English, or your words', 'ابحث عن جهاز — بالعربية أو الإنجليزية أو بكلماتك')}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <p className="muted px-1 text-sm">
+          {L(
+            `${counts.done} finished · ${counts.doing} ongoing · ${counts.todo} not started — everything saves automatically on this device.`,
+            `${counts.done} منتهية · ${counts.doing} جارية · ${counts.todo} لم تبدأ — كل شيء يُحفظ تلقائياً على هذا الجهاز.`,
+          )}
+        </p>
+
+        {groups.map((g) => {
+          const isCollapsed = !searching && collapsed[g.muscle];
+          const gDone = g.tools.filter((t) => toolStatus(active, t, doneTools) === 'done').length;
           return (
-            <div key={`${e.exerciseId}-${i}`} className="card !p-3">
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="font-extrabold">{nameOf(e)}</p>
-                  {muscle && <p className="muted text-sm">{muscle}</p>}
-                </div>
-                {howOf(e) && (
-                  <button className="muted flex h-10 w-10 items-center justify-center" aria-label={L('How to do it', 'طريقة الأداء')} onClick={() => setHowFor(howFor === i ? null : i)}>
-                    <Info size={18} />
-                  </button>
-                )}
-                <button
-                  className="muted flex h-10 w-10 items-center justify-center"
-                  aria-label={L('Remove exercise', 'حذف التمرين')}
-                  onClick={() => setActive({ ...active, exercises: active.exercises.filter((_, j) => j !== i) })}
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-              {howFor === i && (
-                <div className="mt-1 rounded-xl bg-brand-50/50 p-3 dark:bg-white/5">
-                  <ExerciseGuide exercise={{ ...e, how: howOf(e) }} />
-                </div>
-              )}
-              {last && (
-                <p className="muted mt-1 text-sm">
-                  {L('Last time: ', 'المرة السابقة: ')}
-                  <span className="tabular">
-                    {last.sets
-                      .map((s) => (e.unit === 'cardio' ? L(`${s.minutes} min`, `${s.minutes} د`) : e.unit === 'time' ? L(`${s.seconds} s`, `${s.seconds} ث`) : `${s.weight || 0}×${s.reps}`))
-                      .join(L(', ', '، '))}
-                  </span>
-                </p>
-              )}
-              {target && (
-                <p className="text-sm font-bold" style={{ color: COLOR }}>
-                  {target.raise
-                    ? L(`Today: go up to ${target.weight} kg × ${target.reps}`, `اليوم: ارفع إلى ${target.weight} كجم × ${target.reps}`)
-                    : L(`Today: aim for ${target.weight} kg × ${target.reps}`, `اليوم: استهدف ${target.weight} كجم × ${target.reps}`)}
-                </p>
-              )}
-              <div className="mt-2 space-y-1">
-                {e.sets.map((s, k) => (
-                  <SetRow
-                    key={k}
-                    index={k}
-                    set={s}
-                    unit={e.unit}
-                    record={s.done && isRecord(records, e.exerciseId, s)}
-                    onChange={(patch) => patchSet(i, k, patch)}
-                    onToggle={() => toggle(i, k)}
-                    onRemove={() => patchExercise(i, (x) => ({ ...x, sets: x.sets.filter((_, j) => j !== k) }))}
-                  />
-                ))}
-              </div>
-              <button className="btn-ghost mt-1 w-full !min-h-[40px]" onClick={() => patchExercise(i, addSet)}>
-                <Plus size={16} /> {L('Add set', 'إضافة مجموعة')}
+            <section key={g.muscle} className="overflow-hidden rounded-2xl border border-brand-900/10 dark:border-white/10">
+              <button
+                className="flex w-full items-center gap-2 bg-brand-50/70 px-4 py-3 text-start dark:bg-white/5"
+                onClick={() => setCollapsed({ ...collapsed, [g.muscle]: !collapsed[g.muscle] })}
+                aria-expanded={!isCollapsed}
+              >
+                <span className="flex-1 font-extrabold">{MUSCLES[g.muscle] ? pick(MUSCLES[g.muscle]) : g.muscle}</span>
+                <span className="muted text-xs">
+                  {gDone > 0 ? L(`${gDone}/${g.tools.length} finished`, `${gDone}/${g.tools.length} منتهية`) : L(`${g.tools.length} devices`, `${g.tools.length} أجهزة`)}
+                </span>
+                <ChevronDown size={18} className={`muted transition ${isCollapsed ? '-rotate-90' : ''}`} />
               </button>
-            </div>
+              {!isCollapsed && (
+                <div className="divide-y divide-brand-900/5 dark:divide-white/5">
+                  {g.tools.map((t) => (
+                    <button key={t.id} className="flex w-full items-center gap-3 px-3 py-2.5 text-start active:bg-brand-50/60 dark:active:bg-white/5" onClick={() => openToolPop(t)}>
+                      {photoOf(t.id)
+                        ? <img src={photoOf(t.id)} alt="" loading="lazy" className="h-12 w-16 shrink-0 rounded-lg object-cover" />
+                        : <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-brand-50/70 text-2xl dark:bg-white/5" aria-hidden>{t.icon}</span>}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-bold leading-tight">{pick(t.name)}</span>
+                        <span className="muted block text-xs">
+                          {L(`${t.exercises.length} exercises`, `${t.exercises.length} تمارين`)}
+                          {(keywords[t.id] || []).length > 0 && ` · ${(keywords[t.id] || []).join('، ')}`}
+                        </span>
+                      </span>
+                      {statusChip(t)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
           );
         })}
 
+        {searching && !groups.length && !loose.length && (
+          <p className="muted card text-center text-sm">{L('No device matches. Try another word, or add it as a keyword on the machine you mean.', 'لا يوجد جهاز مطابق. جرّب كلمة أخرى، أو أضفها ككلمة خاصة على الجهاز الذي تقصده.')}</p>
+        )}
+
+        {loose.length > 0 && (
+          <section className="overflow-hidden rounded-2xl border border-brand-900/10 dark:border-white/10">
+            <p className="bg-brand-50/70 px-4 py-3 font-extrabold dark:bg-white/5">{L('Added exercises', 'تمارين مضافة')}</p>
+            <div className="divide-y divide-brand-900/5 dark:divide-white/5">
+              {loose.map(({ entry, index }) => {
+                const doneCount = (entry.sets || []).filter((s) => s.done).length;
+                return (
+                  <button key={`${entry.exerciseId}-${index}`} className="flex w-full items-center gap-3 px-3 py-2.5 text-start" onClick={() => { setHowFor(null); setOpenLoose(index); }}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-bold leading-tight">{nameOf(entry)}</span>
+                      <span className="muted block text-xs">{L(`${(entry.sets || []).length} sets`, `${(entry.sets || []).length} مجموعات`)}</span>
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${doneCount ? 'text-white' : STATUS_STYLE.todo}`}
+                      style={doneCount ? { background: '#B97F10' } : undefined}
+                    >
+                      {doneCount ? L(`Ongoing · ${doneCount} ✓`, `جارٍ · ${doneCount} ✓`) : L('Not started', 'لم يبدأ')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         <button className="btn-soft w-full" onClick={() => setAdding(true)}>
-          <Plus size={18} /> {L('Add exercise', 'إضافة تمرين')}
+          <Plus size={18} /> {L('Add your own exercise', 'أضف تمريناً خاصاً')}
         </button>
         <button
           className="btn-danger w-full"
@@ -388,6 +547,114 @@ export default function GymSession() {
           )}
         </div>
       </div>
+
+      {/* The machine pop-up: its exercises, the numbers, its own Save. */}
+      <Sheet
+        open={Boolean(tool)}
+        onClose={() => setOpenTool(null)}
+        title={tool ? `${tool.icon} ${pick(tool.name)}` : ''}
+        footer={
+          tool && (
+            <div className="flex gap-2">
+              <button
+                className={`btn-soft flex-1 ${doneTools.includes(tool.id) ? '!bg-[#2F7D4F] !text-white' : ''}`}
+                onClick={() => toggleDoneTool(tool)}
+                aria-pressed={doneTools.includes(tool.id)}
+              >
+                <Check size={18} />
+                {doneTools.includes(tool.id) ? L('Finished — tap to undo', 'انتهى — اضغط للتراجع') : L('Mark finished', 'وضع علامة انتهى')}
+              </button>
+              <button
+                className="btn-primary flex-1"
+                onClick={() => {
+                  setOpenTool(null);
+                  toast(L('Saved on this device', 'حُفظ على هذا الجهاز'));
+                }}
+              >
+                {L('Save', 'حفظ')}
+              </button>
+            </div>
+          )
+        }
+      >
+        {tool && (
+          <div className="space-y-3">
+            {photoOf(tool.id) && <img src={photoOf(tool.id)} alt="" className="max-h-44 w-full rounded-2xl object-cover" />}
+            <div className="flex flex-wrap gap-1.5">
+              {tool.exercises.map((x) => {
+                const inSession = toolMine.some((e) => e.exerciseId === x.id);
+                const selected = selId === x.id;
+                return (
+                  <button
+                    key={x.id}
+                    className={`rounded-full px-3 py-2 text-sm font-bold ${selected ? 'text-white' : inSession ? 'bg-brand-100 dark:bg-white/15' : 'bg-brand-50/70 dark:bg-white/5'}`}
+                    style={selected ? { background: COLOR } : undefined}
+                    onClick={() => {
+                      if (!inSession) setActive({ ...active, exercises: [...active.exercises, makeExercise(EXERCISES[x.id], sessions)] });
+                      setPopEx(x.id);
+                    }}
+                  >
+                    {pick(EXERCISES[x.id].name)}
+                    {!inSession && ' +'}
+                  </button>
+                );
+              })}
+            </div>
+            {selIdx >= 0 && setEditor(selIdx, active.exercises[selIdx])}
+            {selIdx >= 0 && (
+              <button
+                className="btn-ghost w-full !min-h-[40px] text-sm"
+                onClick={() => {
+                  const wasLast = toolMine.length <= 1;
+                  setActive({
+                    ...active,
+                    exercises: active.exercises.filter((_, j) => j !== selIdx),
+                    ...(wasLast ? { doneTools: doneTools.filter((id) => id !== tool.id) } : {}),
+                  });
+                  setPopEx(null);
+                }}
+              >
+                <Trash2 size={16} /> {L('Remove this exercise from the workout', 'حذف هذا التمرين من الحصة')}
+              </button>
+            )}
+            <KeywordsEditor toolId={tool.id} keywords={keywords} onChange={setKeywords} />
+            <p className="muted text-center text-xs">{L('Saves automatically as you type — reopen any time, even after closing the app.', 'يُحفظ تلقائياً أثناء الكتابة — أعد الفتح في أي وقت، حتى بعد إغلاق التطبيق.')}</p>
+          </div>
+        )}
+      </Sheet>
+
+      {/* A custom exercise's pop-up: the same editor, without a machine. */}
+      <Sheet
+        open={Boolean(looseValid)}
+        onClose={() => setOpenLoose(null)}
+        title={looseValid ? nameOf(looseEntry) : ''}
+        footer={
+          <button
+            className="btn-primary w-full"
+            onClick={() => {
+              setOpenLoose(null);
+              toast(L('Saved on this device', 'حُفظ على هذا الجهاز'));
+            }}
+          >
+            {L('Save', 'حفظ')}
+          </button>
+        }
+      >
+        {looseValid && (
+          <div className="space-y-3">
+            {setEditor(openLoose, looseEntry)}
+            <button
+              className="btn-ghost w-full !min-h-[40px] text-sm"
+              onClick={() => {
+                setActive({ ...active, exercises: active.exercises.filter((_, j) => j !== openLoose) });
+                setOpenLoose(null);
+              }}
+            >
+              <Trash2 size={16} /> {L('Remove this exercise from the workout', 'حذف هذا التمرين من الحصة')}
+            </button>
+          </div>
+        )}
+      </Sheet>
 
       <ExercisePicker
         open={adding}

@@ -8,6 +8,8 @@ import { askAI, aiAvailable } from '../lib/ai';
 import { equipmentPrompt, readEquipment } from '../lib/aiPrompts';
 import { customExercise } from '../lib/gymSession';
 import { toolStats } from '../lib/gym';
+import { toolMatches } from '../lib/gymTools';
+import KeywordsEditor from './KeywordsEditor';
 import { AiSetupNote, PhotoButton, useAiError } from './Ai';
 import { Sheet, useToast } from './ui';
 import ExerciseGuide from './ExerciseGuide';
@@ -73,6 +75,7 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
   const [equipmentId, setEquipmentId] = useState(null);
   const [muscleFilter, setMuscleFilter] = useState('all');
   const [sessions] = useStore('gymSessions', EMPTY);
+  const [keywords, setKeywords] = useStore('gymKeywords', NONE);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState(null); // AI answer for equipment not in the catalogue
   const [busy, setBusy] = useState(false);
@@ -80,14 +83,20 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return Object.values(EXERCISES).filter((x) => `${x.name.en} ${x.name.ar} ${x.muscle}`.toLowerCase().includes(q)).slice(0, 20);
-  }, [query]);
+    // An exercise also matches when its machine carries one of the person's
+    // own keywords for it.
+    const byKeyword = new Set(
+      EQUIPMENT.filter((e) => toolMatches(e, EXERCISES, keywords, query, MUSCLES)).flatMap((e) => e.exercises.map((x) => x.id)),
+    );
+    return Object.values(EXERCISES)
+      .filter((x) => `${x.name.en} ${x.name.ar} ${x.muscle}`.toLowerCase().includes(q) || byKeyword.has(x.id))
+      .slice(0, 20);
+  }, [query, keywords]);
 
   const toolResults = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return EQUIPMENT.filter((e) => `${e.name.en} ${e.name.ar}`.toLowerCase().includes(q)).slice(0, 5);
-  }, [query]);
+    if (!query.trim()) return [];
+    return EQUIPMENT.filter((e) => toolMatches(e, EXERCISES, keywords, query, MUSCLES)).slice(0, 5);
+  }, [query, keywords]);
 
   // What this person actually trains on, from their saved sessions: their
   // usual tools come first so the machine they want is one tap away, not a
@@ -248,6 +257,7 @@ export default function ExercisePicker({ open, onClose, onAdd, addLabel }) {
           )}
           <h3 className="text-lg font-extrabold"><span aria-hidden>{equipment.icon}</span> {pick(equipment.name)}</h3>
           <ToolDashboard equipment={equipment} sessions={sessions} />
+          <KeywordsEditor toolId={equipment.id} keywords={keywords} onChange={setKeywords} />
           {PHOTOS[equipment.id]?.label && PHOTOS[equipment.id].label !== photoOf(equipment.id) && (
             <button className="flex w-full items-center gap-3 rounded-2xl bg-brand-50/70 p-2 text-start text-sm dark:bg-white/5" onClick={() => setZoom(PHOTOS[equipment.id].label)}>
               <img src={PHOTOS[equipment.id].label} alt="" className="h-14 w-20 rounded-lg object-cover" />

@@ -1,4 +1,9 @@
 import { lazy, Suspense, useEffect } from 'react';
+import { retryImport } from './lib/lazyRetry';
+
+// Pages load with a retry and one guarded reload, so an update shipping
+// while the app is open never strands a screen on a missing chunk.
+const lazyPage = (factory) => lazy(() => retryImport(factory));
 import { Route, Routes, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { App as CapApp } from '@capacitor/app';
 import { useTheme } from './hooks/useTheme';
@@ -12,23 +17,23 @@ import { useAuth } from './hooks/useAuth';
 import { useStore } from './hooks/useStore';
 import { startUpdates } from './lib/liveUpdate';
 
-const Gym = lazy(() => import('./pages/Gym'));
-const GymSession = lazy(() => import('./pages/GymSession'));
-const GymHistory = lazy(() => import('./pages/GymHistory'));
-const Food = lazy(() => import('./pages/Food'));
-const FoodDatabasePage = lazy(() => import('./pages/FoodDatabasePage'));
-const Prayer = lazy(() => import('./pages/Prayer'));
-const Quran = lazy(() => import('./pages/Quran'));
-const QuranSurah = lazy(() => import('./pages/QuranSurah'));
-const Azkar = lazy(() => import('./pages/Azkar'));
-const Social = lazy(() => import('./pages/Social'));
-const English = lazy(() => import('./pages/English'));
-const Settings = lazy(() => import('./pages/Settings'));
-const SignIn = lazy(() => import('./pages/SignIn'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Weight = lazy(() => import('./pages/Weight'));
-const Tasks = lazy(() => import('./pages/Tasks'));
-const Watch = lazy(() => import('./pages/Watch'));
+const Gym = lazyPage(() => import('./pages/Gym'));
+const GymSession = lazyPage(() => import('./pages/GymSession'));
+const GymHistory = lazyPage(() => import('./pages/GymHistory'));
+const Food = lazyPage(() => import('./pages/Food'));
+const FoodDatabasePage = lazyPage(() => import('./pages/FoodDatabasePage'));
+const Prayer = lazyPage(() => import('./pages/Prayer'));
+const Quran = lazyPage(() => import('./pages/Quran'));
+const QuranSurah = lazyPage(() => import('./pages/QuranSurah'));
+const Azkar = lazyPage(() => import('./pages/Azkar'));
+const Social = lazyPage(() => import('./pages/Social'));
+const English = lazyPage(() => import('./pages/English'));
+const Settings = lazyPage(() => import('./pages/Settings'));
+const SignIn = lazyPage(() => import('./pages/SignIn'));
+const Dashboard = lazyPage(() => import('./pages/Dashboard'));
+const Weight = lazyPage(() => import('./pages/Weight'));
+const Tasks = lazyPage(() => import('./pages/Tasks'));
+const Watch = lazyPage(() => import('./pages/Watch'));
 
 /** Android hardware back: history first, then leave the app from the home screen. */
 function useNativeBackButton() {
