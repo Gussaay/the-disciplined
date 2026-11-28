@@ -6,6 +6,7 @@ import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { Bars, Page, Section, Sheet, useToast } from '../components/ui';
 import ExercisePicker from '../components/ExercisePicker';
+import QuickAddButton from '../components/QuickAdd';
 import { useAiError } from '../components/Ai';
 import { EXERCISES, PROGRAMS } from '../data/equipment';
 import { dailyTotals, personalRecords, sessionsThisWeek } from '../lib/gym';
@@ -93,9 +94,12 @@ export default function Gym() {
       title={L('Training', 'التمرين')}
       subtitle={L(`${done} of ${goal} sessions this week`, `${done} من ${goal} حصص هذا الأسبوع`)}
       action={
-        <Link to="/gym/history" className="btn-ghost !px-3" aria-label={L('History', 'السجل')}>
-          <History size={20} />
-        </Link>
+        <div className="flex items-center gap-2">
+          <QuickAddButton />
+          <Link to="/gym/history" className="btn-ghost !px-3" aria-label={L('History', 'السجل')}>
+            <History size={20} />
+          </Link>
+        </div>
       }
     >
       {active && (

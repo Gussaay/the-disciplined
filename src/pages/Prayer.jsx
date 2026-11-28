@@ -4,6 +4,7 @@ import { BookOpen, Check, ChevronLeft, ChevronRight, Flame, LocateFixed, MapPin,
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
 import { Field, Page, Section, Sheet, useToast } from '../components/ui';
+import QuickAddButton from '../components/QuickAdd';
 import {
   CITIES, DEFAULT_PLACE, METHODS, PRAYERS, countdown, daySummary, prayerNow, prayerStreak, prayerTimes, qiblaDirection, weekSummary,
 } from '../lib/prayer';
@@ -89,9 +90,12 @@ export default function Prayer() {
       title={L('Prayer', 'الصلاة')}
       subtitle={hijri(fromKey(day))}
       action={
-        <button className="btn-ghost !px-3 text-sm" onClick={() => setPlacing(true)}>
-          <MapPin size={18} /> <span className="max-w-[7rem] truncate">{place}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <QuickAddButton />
+          <button className="btn-ghost !px-3 text-sm" onClick={() => setPlacing(true)}>
+            <MapPin size={18} /> <span className="max-w-[7rem] truncate">{place}</span>
+          </button>
+        </div>
       }
     >
       {!settings.lat && (

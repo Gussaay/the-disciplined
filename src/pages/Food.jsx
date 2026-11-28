@@ -9,6 +9,7 @@ import { EditEntry } from '../components/FoodTools';
 import TrainerPlan from '../components/TrainerPlan';
 import AiCoach from '../components/AiCoach';
 import AddFood, { MacroLine } from '../components/AddFood';
+import QuickAddButton from '../components/QuickAdd';
 import { SaveMeal, formatAmount } from '../components/FoodDatabase';
 import { DAILY_VALUE, MICRO_GROUPS, NUTRIENT_NAMES, microTotals } from '../lib/foodDb';
 import { useAiError } from '../components/Ai';
@@ -108,9 +109,12 @@ export default function Food() {
     <Page
       goal="food"
       action={
-        <Link to="/food/database" className="btn-soft !min-h-[40px] !px-3 text-sm">
-          <Database size={16} /> {L('Foods', 'الأغذية')}
-        </Link>
+        <div className="flex items-center gap-2">
+          <QuickAddButton />
+          <Link to="/food/database" className="btn-soft !min-h-[40px] !px-3 text-sm">
+            <Database size={16} /> {L('Foods', 'الأغذية')}
+          </Link>
+        </div>
       }
       title={L('Healthy food', 'الغذاء الصحي')}
       subtitle={planning ? L('Your template day', 'يومك النموذجي') : day === today ? L('Today', 'اليوم') : date(fromKey(day))}

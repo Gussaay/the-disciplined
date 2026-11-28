@@ -8,6 +8,7 @@ import { useStore } from '../hooks/useStore';
 import { goalById } from '../config';
 import { Field, Page, Section, Segmented, Sheet, useConfirm, useToast } from '../components/ui';
 import { PhotoButton, useAiError } from '../components/Ai';
+import QuickAddButton from '../components/QuickAdd';
 import { askAI, aiAvailable, transcribe } from '../lib/ai';
 import { recordingSupported, startRecording } from '../lib/voice';
 import {
@@ -194,9 +195,12 @@ export default function Tasks() {
       title={L('Tasks', 'المهام')}
       subtitle={L(`${appDone} of ${appTasks.length} goals · ${mineToday} of your tasks today`, `${appDone} من ${appTasks.length} أهداف · ${mineToday} من مهامك اليوم`)}
       action={
-        <button className="btn-soft !min-h-[40px] !px-3 text-sm" onClick={() => setCalendar(true)}>
-          <CalendarDays size={16} /> {L('Calendar', 'التقويم')}
-        </button>
+        <div className="flex items-center gap-2">
+          <QuickAddButton />
+          <button className="btn-soft !min-h-[40px] !px-3 text-sm" onClick={() => setCalendar(true)}>
+            <CalendarDays size={16} /> {L('Calendar', 'التقويم')}
+          </button>
+        </div>
       }
     >
       <div className="card space-y-2">

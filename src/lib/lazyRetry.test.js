@@ -35,12 +35,14 @@ test('retries a failing import until it succeeds', async () => {
 test('reloads once when the chunk keeps failing, then throws on the next visit', async () => {
   const storage = fakeStorage();
   let reloads = 0;
+  let signal;
+  const reloaded = new Promise((r) => { signal = r; });
   const pending = retryImport(
     async () => { throw new Error('chunk missing'); },
-    { reload: () => { reloads += 1; }, storage, delay: 0 },
+    { reload: () => { reloads += 1; signal(); }, storage, delay: 0 },
   );
-  // The reload path never settles; give it time to run, then check effects.
-  await new Promise((r) => setTimeout(r, 30));
+  // The reload path never settles; wait until the reload actually fires.
+  await reloaded;
   assert.equal(reloads, 1);
   assert.equal(storage.getItem('td~chunk-reload'), '1');
   void pending;

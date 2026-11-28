@@ -5,6 +5,7 @@ import {
   MoonStar, Scale, Settings as SettingsIcon, Sparkles, Users, UtensilsCrossed, Watch as WatchIcon,
 } from 'lucide-react';
 import UpdateBanner from '../components/UpdateBanner';
+import QuickAddButton from '../components/QuickAdd';
 import { useAuth } from '../hooks/useAuth';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
@@ -232,6 +233,7 @@ export default function Home() {
 
       <div className="space-y-3 px-4 pt-4">
         <UpdateBanner />
+        <QuickAddButton variant="card" />
         {goals.map((g) => (
           <Link key={g.id} to={g.path} className="card flex animate-rise items-center gap-3 active:scale-[0.99]">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl" style={{ background: `${g.color}1F` }} aria-hidden>
