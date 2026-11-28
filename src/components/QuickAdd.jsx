@@ -3,6 +3,7 @@
 // sorts it into proposals for the four logs, and nothing is written until
 // the person reviews the proposals and taps Save.
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Dumbbell, ListTodo, Loader2, Mic, MoonStar, Sparkles, Square, Trash2, UtensilsCrossed } from 'lucide-react';
 import { useLang } from '../i18n';
 import { useStore } from '../hooks/useStore';
@@ -199,7 +200,10 @@ export default function QuickAddButton({ variant = 'button' }) {
         </button>
       )}
 
-      <Sheet
+      {/* Portalled to the body: the page header's backdrop blur would
+          otherwise trap the sheet's fixed positioning inside the header. */}
+      {createPortal(
+        <Sheet
         open={open}
         onClose={() => setOpen(false)}
         title={L('Quick add', 'إضافة سريعة')}
@@ -256,7 +260,6 @@ export default function QuickAddButton({ variant = 'button' }) {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder={L('What did you do?', 'ماذا فعلت؟')}
-              autoFocus
             />
             <div className="flex gap-2">
               <button className="btn-primary flex-1" disabled={!text.trim() || Boolean(busy)} onClick={sort}>
@@ -273,7 +276,9 @@ export default function QuickAddButton({ variant = 'button' }) {
             {recording && <p className="text-center text-sm font-bold text-red-600">{L('Listening… tap Stop when you finish', 'جارٍ الاستماع… اضغط إيقاف عند الانتهاء')}</p>}
           </div>
         )}
-      </Sheet>
+        </Sheet>,
+        document.body,
+      )}
     </>
   );
 }
